@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Producten Beheren{% endblock %}
+
+{% block content %}
+    <h2>Basisproducten Beheer</h2>
+
+    <a href="{{ url_for('products.add_product') }}" class="button-link success">Nieuw Product Toevoegen</a>
+
+    <form method="GET" action="{{ url_for('products.manage_products') }}" class="filter-form">
+        <select name="category" onchange="this.form.submit()">
+            <option value="0" {% if not selected_category_id %}selected{% endif %}>Alle Categorieën</option>
+            {% for category in all_categories %}
+            <option value="{{ category.id }}" {% if selected_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="search" placeholder="Zoek op naam, leverancier..." value="{{ search_query }}">
+        <button type="submit" class="button button-primary">Filter</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Naam</th>
+                <th>Categorie</th>
+                <th>Verpakking</th>
+                <th>Prijs</th>
+                <th>Eenheidsprijs</th>
+                <th>Acties</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in base_products %}
+            <tr>
+                <td>{{ product.name }}</td>
+                <td>{{ product.category.name }}</td>
+                <td>{{ product.package_weight | format_number_flexible }} {{ product.package_unit }}</td>
+                <td>€ {{ product.package_price | format_currency(2) }}</td>
+                <td>€ {{ product.unit_price_calculated | format_currency(2) }}/{{ product.package_unit }}</td>
+                <td>
+                    <a href="{{ url_for('products.edit_product', product_id=product.id) }}" class="button-link primary">Bewerken</a>
+                    <form action="{{ url_for('products.delete_product', product_id=product.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ product.name }} wilt verwijderen?');">Verwijderen</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">Geen basisproducten gevonden.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

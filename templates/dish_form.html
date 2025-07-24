@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Gerecht Bewerken{% endblock %}
+
+{% block content %}
+    <h2>Gerecht Bewerken: {{ dish.name }}</h2>
+
+    <form action="{{ form_action }}" method="POST">
+        <label for="dish_name">Naam van het gerecht:</label>
+        <input type="text" id="dish_name" name="dish_name" value="{{ dish.name }}" required>
+        
+        <label for="dish_category">Categorie van het gerecht:</label>
+        <select id="dish_category" name="dish_category" onchange="toggleNewDishCategoryInput()" required>
+            <option value="">-- Selecteer of voeg nieuwe toe --</option>
+            {% for category in all_dish_categories %}
+                <option value="{{ category.id }}" {% if dish.dish_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+            <option value="new_dish_category">-- Nieuwe Categorie Toevoegen --</option>
+        </select>
+        <div id="new-dish-category-input-div" style="display:none; margin-bottom: 20px;">
+            <label for="new_dish_category_name">Nieuwe Gerecht Categorie Naam:</label>
+            <input type="text" id="new_dish_category_name" name="new_dish_category_name" placeholder="Bv. Hoofdgerechten, Desserts...">
+        </div>
+
+        <h3>Ingrediënten</h3>
+        <div id="ingredients-container"></div>
+        <button type="button" onclick="addIngredientRow()" class="button button-primary" style="margin-bottom: 20px;">Voeg Ingrediënt Toe</button>
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);">
+
+        <h3>Winstmarge</h3>
+        <div class="profit-margin-options">
+            <input type="radio" id="profit_percentage" name="profit_type" value="percentage" {% if dish.profit_type == 'percentage' %}checked{% endif %}>
+            <label for="profit_percentage">Percentage</label>
+            <input type="radio" id="profit_multiplier" name="profit_type" value="multiplier" {% if dish.profit_type == 'multiplier' %}checked{% endif %}>
+            <label for="profit_multiplier">Vermenigvuldiger</label>
+        </div>
+        <div class="profit-value-group">
+            <input type="number" step="0.01" id="profit_value" name="profit_value" value="{{ dish.profit_value }}" required>
+            <span id="profit-unit"></span>
+        </div>
+
+        <button type="submit" class="button button-success" style="margin-top: 20px;">Gerecht Opslaan</button>
+        <a class="button button-secondary" style="margin-top: 20px;" href="{{ url_for('dishes.manage_dishes') }}">Terug naar Gerechten</a>
+    </form>
+{% endblock %}
+
+{% block scripts %}
+<!-- Data wordt hier veilig geïnjecteerd in een onzichtbaar div-element -->
+<div id="page-data" 
+     data-product-categories='{{ all_product_categories_json | tojson }}'
+     data-existing-ingredients='{{ ingredients_data | tojson }}'
+     data-products-url="{{ url_for('products.get_products_by_category_json') }}"
+     style="display: none;">
+</div>
+
+<script>
+    // Data wordt ingelezen uit het HTML-element, wat linter-vriendelijk is.
+    const pageDataElement = document.getElementById('page-data');
+    const allProductCategories = JSON.parse(pageDataElement.dataset.productCategories);
+    const existingIngredients = JSON.parse(pageDataElement.dataset.existingIngredients);
+    const productsUrl = pageDataElement.dataset.productsUrl;
+
+    function addIngredientRow(ing = null) {
+        const container = document.getElementById('ingredients-container');
+        const newRow = document.createElement('div');
+        newRow.classList.add('ingredient-row');
+
+        let categorySelectHtml = '<select class="category-select" onchange="loadProducts(this)"><option value="">-- Product Categorie --</option>';
+        allProductCategories.forEach(category => {
+            const selected = ing && ing.category_id == category.id ? 'selected' : '';
+            categorySelectHtml += `<option value="${category.id}" ${selected}>${category.name}</option>`;
+        });
+        categorySelectHtml += '</select>';
+
+        newRow.innerHTML = `
+            ${categorySelectHtml}
+            <select name="ingredient_product_id[]" class="product-select" onchange="updateUnitPrice(this)" disabled><option value="">-- Product --</option></select>
+            <input type="number" step="any" name="quantity[]" placeholder="Hoeveelheid" value="${ing ? ing.quantity : ''}" disabled>
+            <span class="unit-price-display">€ N/A</span>
+            <button type="button" class="button remove-btn" onclick="this.closest('.ingredient-row').remove()">X</button>
+        `;
+        container.appendChild(newRow);
+
+        if (ing) {
+            loadProducts(newRow.querySelector('.category-select'), ing.product_id);
+        }
+    }
+
+    async function loadProducts(categorySelect, selectedProductId = null) {
+        const categoryId = categorySelect.value;
+        const row = categorySelect.closest('.ingredient-row');
+        const productSelect = row.querySelector('.product-select');
+        const quantityInput = row.querySelector('input[name="quantity[]"]');
+        
+        productSelect.innerHTML = '<option value="">-- Product --</option>';
+        productSelect.disabled = true;
+        quantityInput.disabled = true;
+
+        if (categoryId) {
+            try {
+                const url = `${productsUrl}?category_id=${categoryId}`;
+                const response = await fetch(url);
+                const products = await response.json();
+                products.forEach(product => {
+                    const option = document.createElement('option');
+                    option.value = product.id;
+                    option.setAttribute('data-unit-price', product.unit_price_calculated);
+                    option.setAttribute('data-package-unit', product.package_unit);
+                    option.textContent = product.name;
+                    if (selectedProductId && product.id == selectedProductId) {
+                        option.selected = true;
+                    }
+                    productSelect.appendChild(option);
+                });
+                productSelect.disabled = false;
+                updateUnitPrice(productSelect);
+            } catch (error) {
+                console.error('Error loading products:', error);
+            }
+        }
+    }
+
+    function updateUnitPrice(productSelect) {
+        const selectedOption = productSelect.options[productSelect.selectedIndex];
+        const row = productSelect.closest('.ingredient-row');
+        const quantityInput = row.querySelector('input[name="quantity[]"]');
+        const unitPriceDisplay = row.querySelector('.unit-price-display');
+
+        if (selectedOption && selectedOption.value) {
+            const unitPrice = selectedOption.getAttribute('data-unit-price');
+            const packageUnit = selectedOption.getAttribute('data-package-unit');
+            unitPriceDisplay.textContent = (unitPrice != null) ? `€ ${parseFloat(unitPrice).toFixed(2).replace('.', ',')}/${packageUnit || ''}` : '€ N/A';
+            quantityInput.disabled = false;
+        } else {
+            unitPriceDisplay.textContent = '€ N/A';
+            quantityInput.disabled = true;
+        }
+    }
+
+    function toggleProfitInput() {
+        const profitType = document.querySelector('input[name="profit_type"]:checked').value;
+        document.getElementById('profit-unit').textContent = (profitType === 'percentage') ? "%" : "x";
+    }
+
+    function toggleNewDishCategoryInput() {
+        const categorySelect = document.getElementById('dish_category');
+        document.getElementById('new-dish-category-input-div').style.display = categorySelect.value === 'new_dish_category' ? 'block' : 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (existingIngredients && existingIngredients.length > 0) {
+            existingIngredients.forEach(ing => addIngredientRow(ing));
+        } else {
+            addIngredientRow();
+        }
+        toggleProfitInput();
+        document.querySelectorAll('input[name="profit_type"]').forEach(radio => radio.addEventListener('change', toggleProfitInput));
+    });
+</script>
+{% endblock %}

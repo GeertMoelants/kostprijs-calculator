@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Resultaat: {{ dish_name }}{% endblock %}
+
+{% block content %}
+    <h2>Resultaat voor {{ dish_name }}</h2>
+
+    <div class="result-box">
+        <h3>Ingrediënten Overzicht:</h3>
+        <ul>
+            {% for ingredient in ingredients %}
+            <li>{{ ingredient.ingredient_name }}: {{ ingredient.quantity | format_number_flexible(2) }} eenheden x € {{ ingredient.unit_price | format_currency(2) }} = € {{ (ingredient.quantity * ingredient.unit_price) | format_currency(2) }}</li>
+            {% endfor %}
+        </ul>
+
+        <div class="summary" style="margin-top: 20px;">
+            <p><strong>Totale Kostprijs:</strong> € {{ total_cost | format_currency(2) }}</p>
+            <p><strong>Winstmarge:</strong> 
+                {% if profit_type == 'percentage' %}
+                    {{ profit_value | format_currency(2) }} %
+                {% elif profit_type == 'multiplier' %}
+                    x {{ profit_value | format_currency(2) }}
+                {% endif %}
+            </p>
+            <p><strong>Berekende Verkoopprijs:</strong> € {{ selling_price | format_currency(2) }}</p>
+        </div>
+    </div>
+    <a href="{{ url_for('index') }}" class="back-link">Terug naar Overzicht</a>
+{% endblock %}

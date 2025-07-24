@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Product Bewerken' if product else 'Product Toevoegen' }}{% endblock %}
+
+{% block content %}
+    <h2>{{ 'Product Bewerken: ' + product.name if product else 'Nieuw Product Toevoegen' }}</h2>
+    
+    <form action="{{ form_action }}" method="POST">
+        <label for="name">Productnaam:</label>
+        <input type="text" id="name" name="name" value="{{ product.name if product else '' }}" required>
+
+        <label for="category">Categorie:</label>
+        <select id="category" name="category" onchange="toggleNewCategoryInput()" required>
+            <option value="">-- Selecteer of voeg nieuwe toe --</option>
+            {% for category in all_categories %}
+                <option value="{{ category.id }}" {% if product and product.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+            <option value="new_category">-- Nieuwe Categorie Toevoegen --</option>
+        </select>
+        <div id="new-category-input-div" style="display:none; margin-bottom: 20px;">
+            <label for="new_category_name">Nieuwe Categorie Naam:</label>
+            <input type="text" id="new_category_name" name="new_category_name" placeholder="Voer nieuwe categorie naam in">
+        </div>
+
+        <label for="package_weight">Gewicht/Aantal per verpakking:</label>
+        <input type="text" id="package_weight" name="package_weight" value="{{ product.package_weight if product and product.package_weight is not none else '' }}">
+
+        <label for="package_unit">Eenheid (bv. Kg, Stuks, Liter):</label>
+        <input type="text" id="package_unit" name="package_unit" value="{{ product.package_unit if product else 'Stuks' }}">
+
+        <label for="package_price">Prijs per verpakking (€):</label>
+        <input type="text" id="package_price" name="package_price" value="{{ product.package_price if product and product.package_price is not none else '' }}">
+
+        <label for="supplier">Leverancier:</label>
+        <select id="supplier" name="supplier" onchange="toggleNewSupplierInput()" required>
+            <option value="">-- Selecteer of voeg nieuwe toe --</option>
+            {% for supplier in all_suppliers %}
+                <option value="{{ supplier.id }}" {% if product and product.supplier_id == supplier.id %}selected{% endif %}>{{ supplier.name }}</option>
+            {% endfor %}
+            <option value="new_supplier">-- Nieuwe Leverancier Toevoegen --</option>
+        </select>
+        <div id="new-supplier-input-div" style="display:none; margin-bottom: 20px;">
+            <label for="new_supplier_name">Nieuwe Leverancier Naam:</label>
+            <input type="text" id="new_supplier_name" name="new_supplier_name" placeholder="Voer nieuwe leverancier naam in">
+        </div>
+
+        <label for="article_number">Artikelnummer:</label>
+        <input type="text" id="article_number" name="article_number" value="{{ product.article_number if product else '' }}">
+
+        <button type="submit" class="button button-success">{{ 'Product Opslaan' if product else 'Product Toevoegen' }}</button>
+        <a class="button button-secondary" style="margin-top: 20px;" href="{{ url_for('products.manage_products') }}">Terug naar Producten</a>
+    </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function toggleNewCategoryInput() {
+        const categorySelect = document.getElementById('category');
+        const newCategoryDiv = document.getElementById('new-category-input-div');
+        newCategoryDiv.style.display = categorySelect.value === 'new_category' ? 'block' : 'none';
+    }
+    function toggleNewSupplierInput() {
+        const supplierSelect = document.getElementById('supplier');
+        const newSupplierDiv = document.getElementById('new-supplier-input-div');
+        newSupplierDiv.style.display = supplierSelect.value === 'new_supplier' ? 'block' : 'none';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleNewCategoryInput();
+        toggleNewSupplierInput();
+        // Zorg ervoor dat de inputvelden voor nieuwe categorie/leverancier getoond worden als er geen ID is geselecteerd
+        if (!document.getElementById('category').value) {
+            document.getElementById('category').value = 'new_category';
+            toggleNewCategoryInput();
+        }
+        if (!document.getElementById('supplier').value) {
+            document.getElementById('supplier').value = 'new_supplier';
+            toggleNewSupplierInput();
+        }
+    });
+</script>
+{% endblock %}

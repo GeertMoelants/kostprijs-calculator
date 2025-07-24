@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Overzicht Dashboard{% endblock %}
+
+{% block content %}
+    <a href="{{ url_for('dishes.create_dish') }}" class="button-link success" style="margin-bottom: 25px;">Nieuw Gerecht Samenstellen</a>
+
+    <div class="accordion-container" id="dishes-accordion-container">
+        <button class="accordion-toggle active">Samengestelde Gerechten</button>
+        <div class="accordion-panel" style="max-height: fit-content;">
+            {% if not composed_dishes_by_category %}
+                <p style="padding: 20px;">Er zijn nog geen gerechten samengesteld.</p>
+            {% else %}
+                <div id="dish-categories-sortable">
+                    {% for category_name, dishes in composed_dishes_by_category.items() %}
+                        <div class="category-section" data-category-name="{{ category_name }}">
+                            <h3 style="padding-left: 18px; cursor: move;">&#x2630; {{ category_name }}</h3>
+                            <div class="card-grid" style="padding: 0 18px 18px 18px;">
+                                {% for dish in dishes %}
+                                    <div class="card">
+                                        <div class="card-image-placeholder"><span>Afbeelding</span></div>
+                                        <div class="card-body">
+                                            <h3 class="card-title">{{ dish.name }}</h3>
+                                            <p class="card-info"><strong>Kostprijs:</strong> € {{ dish.cost_price_calculated | format_currency(2) }}</p>
+                                            <p class="card-info"><strong>Verkoopprijs:</strong> € {{ dish.selling_price_calculated | format_currency(2) }}</p>
+                                        </div>
+                                        <div class="card-footer">
+                                            <a href="{{ url_for('dishes.edit_dish', dish_id=dish.id) }}" class="button-link primary" style="width: 100%; box-sizing: border-box;">Details & Bewerken</a>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="accordion-container" id="products-accordion-container">
+        <button class="accordion-toggle">Basisproducten</button>
+        <div class="accordion-panel">
+            {% if not products_by_category %}
+                <p style="padding: 20px;">Er zijn geen basisproducten gevonden.</p>
+            {% else %}
+                <div id="product-categories-sortable">
+                    {% for category_name, products in products_by_category.items() %}
+                        <div class="category-section" data-category-name="{{ category_name }}">
+                            <h3 style="padding-left: 18px; cursor: move;">&#x2630; {{ category_name }}</h3>
+                            <table style="margin: 0 18px 18px 18px; width: calc(100% - 36px);">
+                                <thead>
+                                    <tr><th>Naam</th><th>Verpakking</th><th>Eenheidsprijs</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for product in products %}
+                                    <tr>
+                                        <td>{{ product.name }}</td>
+                                        <td>{{ product.package_weight | format_number_flexible }} {{ product.package_unit }}</td>
+                                        <td>€ {{ product.unit_price_calculated | format_currency(2) }}/{{ product.package_unit }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const accordions = document.querySelectorAll(".accordion-toggle");
+    accordions.forEach(acc => {
+        acc.addEventListener("click", function() {
+            this.classList.toggle("active");
+            const panel = this.nextElementSibling;
+            if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
+                panel.style.maxHeight = null;
+            } else {
+                panel.style.maxHeight = panel.scrollHeight + "px";
+            }
+        });
+    });
+
+    async function saveOrder(type, newOrder) {
+        try {
+            const url = "{{ url_for('dishes.save_order') }}";
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: type, order: newOrder })
+            });
+        } catch (error) {
+            console.error('Failed to save order:', error);
+        }
+    }
+
+    const dishSortable = document.getElementById('dish-categories-sortable');
+    if (dishSortable) {
+        new Sortable(dishSortable, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: function (evt) {
+                const newOrder = Array.from(evt.to.children).map(el => el.dataset.categoryName);
+                saveOrder('dishes', newOrder);
+            },
+        });
+    }
+
+    const productSortable = document.getElementById('product-categories-sortable');
+    if (productSortable) {
+        new Sortable(productSortable, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: function (evt) {
+                const newOrder = Array.from(evt.to.children).map(el => el.dataset.categoryName);
+                saveOrder('products', newOrder);
+            },
+        });
+    }
+});
+</script>
+{% endblock %}
