@@ -14,10 +14,17 @@ def get_or_create(model, name):
         db.session.add(instance)
     return instance
 
+def get_package_unit_from_form():
+    """Haalt de correcte eenheid op uit het formulier (dropdown of tekstveld)."""
+    unit_selection = request.form.get('package_unit_select')
+    if unit_selection == 'other':
+        # Haal de waarde uit het 'andere' veld, met 'Stuks' als fallback
+        return request.form.get('package_unit_other', 'Stuks').strip() or 'Stuks'
+    return unit_selection
+
 @product_bp.route('/manage_products')
 def manage_products():
     query = Product.query
-    
     selected_category_id = request.args.get('category', type=int)
     search_query = request.args.get('search', '').strip().lower()
 
@@ -41,6 +48,24 @@ def manage_products():
         search_query=request.args.get('search', '')
     )
 
+def get_category_from_form():
+    """Haalt veilig de categorie op uit het formulier."""
+    category_id = request.form.get('category')
+    if category_id == 'new_category':
+        return request.form.get('new_category_name', '').strip()
+    
+    category_obj = Category.query.get(category_id) if category_id else None
+    return category_obj.name if category_obj else None
+
+def get_supplier_from_form():
+    """Haalt veilig de leverancier op uit het formulier."""
+    supplier_id = request.form.get('supplier')
+    if supplier_id == 'new_supplier':
+        return request.form.get('new_supplier_name', '').strip()
+        
+    supplier_obj = Supplier.query.get(supplier_id) if supplier_id else None
+    return supplier_obj.name if supplier_obj else None
+
 @product_bp.route('/products/add', methods=['GET', 'POST'])
 def add_product():
     if request.method == 'POST':
@@ -49,11 +74,12 @@ def add_product():
             flash(f"Productnaam '{name}' is ongeldig of bestaat al.", "danger")
             return redirect(url_for('products.add_product'))
 
-        cat_name = request.form.get('new_category_name', '').strip() if request.form['category'] == 'new_category' else Category.query.get(request.form['category']).name
-        sup_name = request.form.get('new_supplier_name', '').strip() if request.form['supplier'] == 'new_supplier' else Supplier.query.get(request.form['supplier']).name
-
+        cat_name = get_category_from_form()
+        sup_name = get_supplier_from_form()
+        
         category = get_or_create(Category, cat_name)
         supplier = get_or_create(Supplier, sup_name)
+        package_unit = get_package_unit_from_form()
 
         if not category or not supplier:
             flash("Categorie en Leverancier mogen niet leeg zijn.", "danger")
@@ -63,7 +89,7 @@ def add_product():
             name=name,
             category=category,
             package_weight=request.form.get('package_weight', type=float),
-            package_unit=request.form.get('package_unit'),
+            package_unit=package_unit,
             package_price=request.form.get('package_price', type=float),
             supplier=supplier,
             article_number=request.form.get('article_number')
@@ -84,14 +110,14 @@ def edit_product(product_id):
     if request.method == 'POST':
         product.name = request.form['name'].strip()
         
-        cat_name = request.form.get('new_category_name', '').strip() if request.form['category'] == 'new_category' else Category.query.get(request.form['category']).name
-        sup_name = request.form.get('new_supplier_name', '').strip() if request.form['supplier'] == 'new_supplier' else Supplier.query.get(request.form['supplier']).name
+        cat_name = get_category_from_form()
+        sup_name = get_supplier_from_form()
         
         product.category = get_or_create(Category, cat_name)
         product.supplier = get_or_create(Supplier, sup_name)
+        product.package_unit = get_package_unit_from_form()
 
         product.package_weight = request.form.get('package_weight', type=float)
-        product.package_unit = request.form.get('package_unit')
         product.package_price = request.form.get('package_price', type=float)
         product.article_number = request.form.get('article_number')
         

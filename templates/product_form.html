@@ -3,6 +3,10 @@
 {% block title %}{{ 'Product Bewerken' if product else 'Product Toevoegen' }}{% endblock %}
 
 {% block content %}
+    {# Definieer de standaard eenheden en de 'andere' waarde #}
+    {% set standard_units = ['Stuks', 'Kg', 'g', 'L', 'ml'] %}
+    {% set other_value = 'other' %}
+
     <h2>{{ 'Product Bewerken: ' + product.name if product else 'Nieuw Product Toevoegen' }}</h2>
     
     <form action="{{ form_action }}" method="POST">
@@ -25,8 +29,16 @@
         <label for="package_weight">Gewicht/Aantal per verpakking:</label>
         <input type="text" id="package_weight" name="package_weight" value="{{ product.package_weight if product and product.package_weight is not none else '' }}">
 
-        <label for="package_unit">Eenheid (bv. Kg, Stuks, Liter):</label>
-        <input type="text" id="package_unit" name="package_unit" value="{{ product.package_unit if product else 'Stuks' }}">
+        <label for="package_unit_select">Eenheid (bv. Kg, Stuks, Liter):</label>
+        <select id="package_unit_select" name="package_unit_select" onchange="toggleOtherUnitInput()">
+            {% for unit in standard_units %}
+                <option value="{{ unit }}" {% if product and product.package_unit == unit %}selected{% endif %}>{{ unit }}</option>
+            {% endfor %}
+            <option value="{{ other_value }}" {% if product and product.package_unit not in standard_units %}selected{% endif %}>Andere...</option>
+        </select>
+        <input type="text" id="package_unit_other" name="package_unit_other" placeholder="Vul aangepaste eenheid in" 
+               value="{{ product.package_unit if product and product.package_unit not in standard_units else '' }}" 
+               style="display:none; margin-top: 10px;">
 
         <label for="package_price">Prijs per verpakking (€):</label>
         <input type="text" id="package_price" name="package_price" value="{{ product.package_price if product and product.package_price is not none else '' }}">
@@ -64,18 +76,17 @@
         const newSupplierDiv = document.getElementById('new-supplier-input-div');
         newSupplierDiv.style.display = supplierSelect.value === 'new_supplier' ? 'block' : 'none';
     }
+    function toggleOtherUnitInput() {
+        const unitSelect = document.getElementById('package_unit_select');
+        const otherUnitInput = document.getElementById('package_unit_other');
+        // De waarde 'other' wordt nu direct in de JavaScript-code gebruikt voor de duidelijkheid.
+        otherUnitInput.style.display = unitSelect.value === 'other' ? 'block' : 'none';
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         toggleNewCategoryInput();
         toggleNewSupplierInput();
-        // Zorg ervoor dat de inputvelden voor nieuwe categorie/leverancier getoond worden als er geen ID is geselecteerd
-        if (!document.getElementById('category').value) {
-            document.getElementById('category').value = 'new_category';
-            toggleNewCategoryInput();
-        }
-        if (!document.getElementById('supplier').value) {
-            document.getElementById('supplier').value = 'new_supplier';
-            toggleNewSupplierInput();
-        }
+        toggleOtherUnitInput(); // Voer direct uit om de juiste staat te tonen bij het laden
     });
 </script>
 {% endblock %}
