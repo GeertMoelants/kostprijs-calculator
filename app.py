@@ -4,6 +4,7 @@ import pandas as pd
 from collections import OrderedDict
 from sqlalchemy import func
 import os
+import click
 
 # Importeer de db instantie en de modellen
 from models import db, Product, Dish, Category as ProductCategory, DishCategory, Ingredient
@@ -16,23 +17,21 @@ from routes.dishes import dish_bp
 
 app = Flask(__name__)
 
-# --- Database Configuratie & Geheime Sleutel ---
-# Gebruik de DATABASE_URL van Render als die bestaat, anders val terug op een lokale SQLite DB.
+# --- Database Configuratie ---
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Corrigeer de URL voor SQLAlchemy 1.4+
+    # Corrigeer de URL voor SQLAlchemy 1.4+ en voeg sslmode toe
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    if '?sslmode' not in DATABASE_URL:
+        DATABASE_URL += "?sslmode=require"
 
-# Lokale fallback voor de database
+# Lokale fallback
 LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'kostprijs.db')
 LOCAL_DB_URI = f'sqlite:///{LOCAL_DB_PATH}'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or LOCAL_DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Gebruik de SECRET_KEY van Render, met een simpele fallback voor lokaal ontwikkelen.
 app.secret_key = os.environ.get('SECRET_KEY', 'een-simpele-maar-veilige-lokale-sleutel')
-
 
 # Initialiseer de database met de app
 db.init_app(app)
@@ -62,6 +61,7 @@ def format_number_flexible(value):
 # --- API Route voor de Top Gerechten Grafiek ---
 @app.route('/api/top_dishes')
 def top_dishes_api():
+    # ... (deze functie blijft ongewijzigd) ...
     sort_by = request.args.get('sort_by', 'cost_price')
     count = request.args.get('count', 5, type=int)
     all_dishes = Dish.query.all()
@@ -79,6 +79,7 @@ def top_dishes_api():
 # --- Hoofdroute ---
 @app.route('/')
 def index():
+    # ... (deze functie blijft ongewijzigd) ...
     cost_per_category_query = db.session.query(
         ProductCategory.name,
         func.sum(Ingredient.quantity * (Product.package_price / Product.package_weight))
@@ -122,13 +123,18 @@ def index():
         products_by_category=products_by_category
     )
 
-# --- Context instellen en database vullen ---
-with app.app_context():
+# --- Nieuwe CLI Commando's voor Database Beheer ---
+@app.cli.command("init-db")
+def init_db_command():
+    """Maakt de databasetabellen aan."""
     db.create_all()
-    if not ProductCategory.query.first():
-        print("Database is leeg, bezig met vullen...")
-        seed_data()
-        print("Vullen van database voltooid.")
+    print("Database tabellen aangemaakt.")
+
+@app.cli.command("seed-db")
+def seed_db_command():
+    """Vult de database met initiële data uit CSV-bestanden."""
+    seed_data()
+    print("Database gevuld met initiële data.")
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
