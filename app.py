@@ -3,10 +3,12 @@ from flask import Flask, render_template, jsonify, request
 import pandas as pd
 from collections import OrderedDict
 from sqlalchemy import func
+import os
 
 # Importeer de db instantie en de modellen
 from models import db, Product, Dish, Category as ProductCategory, DishCategory, Ingredient
 from category_order_manager import load_category_order
+from db_seeder import seed_data # Importeer de seeder functie
 
 # Importeer de blueprints
 from routes.products import product_bp
@@ -15,7 +17,10 @@ from routes.dishes import dish_bp
 app = Flask(__name__)
 
 # --- Database Configuratie ---
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///kostprijs.db'
+# Render gebruikt een `instance` map niet standaard, dus we specificeren het pad
+instance_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance')
+os.makedirs(instance_path, exist_ok=True)
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(instance_path, "kostprijs.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'verander_dit_naar_een_echte_geheime_sleutel'
 
@@ -29,23 +34,18 @@ app.register_blueprint(dish_bp)
 # --- Custom Jinja2 Filters ---
 @app.template_filter('format_currency')
 def format_currency(value, decimals=2):
-    if value is None or pd.isna(value):
-        return 'N/A'
+    if value is None or pd.isna(value): return 'N/A'
     try:
-        formatted_value = f"{float(value):.{decimals}f}"
-        return formatted_value.replace('.', ',')
+        return f"{float(value):.{decimals}f}".replace('.', ',')
     except (ValueError, TypeError):
         return 'N/A'
 
 @app.template_filter('format_number_flexible')
 def format_number_flexible(value):
-    if value is None or pd.isna(value):
-        return 'N/A'
+    if value is None or pd.isna(value): return 'N/A'
     try:
         float_val = float(value)
-        if float_val == int(float_val):
-            return str(int(float_val))
-        return str(round(float_val, 2)).replace('.', ',')
+        return str(int(float_val)) if float_val == int(float_val) else str(round(float_val, 2)).replace('.', ',')
     except (ValueError, TypeError):
         return 'N/A'
 
@@ -54,17 +54,12 @@ def format_number_flexible(value):
 def top_dishes_api():
     sort_by = request.args.get('sort_by', 'cost_price')
     count = request.args.get('count', 5, type=int)
-
     all_dishes = Dish.query.all()
-
     if sort_by == 'profit':
-        # Sorteer op meest winstgevend (verkoopprijs - kostprijs)
         sorted_dishes = sorted(all_dishes, key=lambda d: d.selling_price_calculated - d.cost_price_calculated, reverse=True)
-    else: # Default: sorteer op kostprijs
+    else:
         sorted_dishes = sorted(all_dishes, key=lambda d: d.cost_price_calculated, reverse=True)
-    
     top_dishes = sorted_dishes[:count]
-
     chart_data = {
         'labels': [d.name for d in top_dishes],
         'data': [d.selling_price_calculated - d.cost_price_calculated if sort_by == 'profit' else d.cost_price_calculated for d in top_dishes]
@@ -74,7 +69,6 @@ def top_dishes_api():
 # --- Hoofdroute ---
 @app.route('/')
 def index():
-    # --- Data voor Kostenverdeling Grafiek (blijft hetzelfde) ---
     cost_per_category_query = db.session.query(
         ProductCategory.name,
         func.sum(Ingredient.quantity * (Product.package_price / Product.package_weight))
@@ -90,7 +84,6 @@ def index():
         'data': [float(row[1]) if row[1] is not None else 0 for row in cost_per_category_query]
     }
 
-    # --- Logica voor het weergeven van de lijsten (blijft hetzelfde) ---
     category_orders = load_category_order()
     all_dish_categories = DishCategory.query.order_by(DishCategory.name).all()
     sorted_dish_category_names = [cat.name for cat in all_dish_categories]
@@ -119,7 +112,13 @@ def index():
         products_by_category=products_by_category
     )
 
+# --- Context instellen en database vullen ---
+with app.app_context():
+    db.create_all()
+    if not ProductCategory.query.first():
+        print("Database is leeg, bezig met vullen...")
+        seed_data()
+        print("Vullen van database voltooid.")
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True, port=5001)
