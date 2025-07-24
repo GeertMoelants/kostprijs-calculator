@@ -16,13 +16,23 @@ from routes.dishes import dish_bp
 
 app = Flask(__name__)
 
-# --- Database Configuratie ---
-# Render gebruikt een `instance` map niet standaard, dus we specificeren het pad
-instance_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance')
-os.makedirs(instance_path, exist_ok=True)
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(instance_path, "kostprijs.db")}'
+# --- Database Configuratie & Geheime Sleutel ---
+# Gebruik de DATABASE_URL van Render als die bestaat, anders val terug op een lokale SQLite DB.
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    # Corrigeer de URL voor SQLAlchemy 1.4+
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Lokale fallback voor de database
+LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'kostprijs.db')
+LOCAL_DB_URI = f'sqlite:///{LOCAL_DB_PATH}'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or LOCAL_DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.secret_key = 'verander_dit_naar_een_echte_geheime_sleutel'
+
+# Gebruik de SECRET_KEY van Render, met een simpele fallback voor lokaal ontwikkelen.
+app.secret_key = os.environ.get('SECRET_KEY', 'een-simpele-maar-veilige-lokale-sleutel')
+
 
 # Initialiseer de database met de app
 db.init_app(app)
