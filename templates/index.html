@@ -3,8 +3,71 @@
 {% block title %}Overzicht Dashboard{% endblock %}
 
 {% block content %}
+<style>
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        gap: 25px;
+        margin-top: 40px;
+    }
+    .dashboard-card {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        height: auto; /* Hoogte automatisch aanpassen */
+        min-height: 450px;
+        display: flex;
+        flex-direction: column;
+    }
+    .dashboard-card h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        text-align: center;
+        font-size: 1.1em;
+        color: var(--dark-gray);
+    }
+    .chart-controls {
+        display: flex;
+        flex-wrap: wrap; /* Zorgt dat controls onder elkaar springen als er geen ruimte is */
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    .chart-controls select {
+        padding: 5px;
+        border-radius: 5px;
+        border: 1px solid var(--border-color);
+        background-color: #f8f9fa;
+        font-family: 'Inter', sans-serif;
+    }
+    .chart-controls input[type="color"] {
+        width: 35px;
+        height: 35px;
+        border: none;
+        padding: 0;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    .chart-container {
+        position: relative;
+        flex-grow: 1;
+        min-height: 250px; /* Minimale hoogte voor de grafiek zelf */
+    }
+    .color-picker-group {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .color-picker-group label {
+        font-size: 0.9em;
+    }
+</style>
+
     <a href="{{ url_for('dishes.create_dish') }}" class="button-link success" style="margin-bottom: 25px;">Nieuw Gerecht Samenstellen</a>
 
+    <!-- Accordion Secties -->
     <div class="accordion-container" id="dishes-accordion-container">
         <button class="accordion-toggle active">Samengestelde Gerechten</button>
         <div class="accordion-panel" style="max-height: fit-content;">
@@ -36,7 +99,6 @@
             {% endif %}
         </div>
     </div>
-
     <div class="accordion-container" id="products-accordion-container">
         <button class="accordion-toggle">Basisproducten</button>
         <div class="accordion-panel">
@@ -67,14 +129,60 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Dashboard Sectie -->
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>Top Gerechten</h3>
+            <div class="chart-controls">
+                <select id="topDishesSortBy">
+                    <option value="cost_price" selected>Duurste (Kostprijs)</option>
+                    <option value="profit">Meest Winstgevend</option>
+                </select>
+                <select id="topDishesCount">
+                    <option value="3">Top 3</option>
+                    <option value="5" selected>Top 5</option>
+                    <option value="10">Top 10</option>
+                </select>
+            </div>
+            <div id="topDishesColorPickers" class="chart-controls">
+                <!-- Kleur-kiezers voor Top Gerechten worden hier dynamisch toegevoegd -->
+            </div>
+            <div class="chart-container">
+                <canvas id="topDishesChart"></canvas>
+            </div>
+        </div>
+        <div class="dashboard-card">
+            <h3>Kostenverdeling per Productcategorie</h3>
+            <div class="chart-controls">
+                <select id="costDistributionChartType">
+                    <option value="doughnut" selected>Doughnut</option>
+                    <option value="pie">Taart</option>
+                </select>
+            </div>
+            <div id="costDistributionColorPickers" class="chart-controls">
+                <!-- Kleur-kiezers voor Kostenverdeling worden hier dynamisch toegevoegd -->
+            </div>
+            <div class="chart-container">
+                <canvas id="costDistributionChart"></canvas>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
 {% block scripts %}
+<!-- Data voor de grafieken -->
+<div id="dashboard-data"
+     data-cost-distribution='{{ cost_distribution_json | safe }}'
+     data-top-dishes-url="{{ url_for('top_dishes_api') }}"
+     style="display: none;">
+</div>
+
+<!-- Bestaand script voor SortableJS en Accordions -->
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    const accordions = document.querySelectorAll(".accordion-toggle");
-    accordions.forEach(acc => {
+    // Accordion functionaliteit
+    document.querySelectorAll(".accordion-toggle").forEach(acc => {
         acc.addEventListener("click", function() {
             this.classList.toggle("active");
             const panel = this.nextElementSibling;
@@ -86,6 +194,7 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    // SortableJS functionaliteit
     async function saveOrder(type, newOrder) {
         try {
             const url = "{{ url_for('dishes.save_order') }}";
@@ -98,30 +207,150 @@ document.addEventListener("DOMContentLoaded", function() {
             console.error('Failed to save order:', error);
         }
     }
-
     const dishSortable = document.getElementById('dish-categories-sortable');
     if (dishSortable) {
-        new Sortable(dishSortable, {
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: function (evt) {
-                const newOrder = Array.from(evt.to.children).map(el => el.dataset.categoryName);
-                saveOrder('dishes', newOrder);
-            },
+        new Sortable(dishSortable, { animation: 150, ghostClass: 'sortable-ghost', onEnd: function (evt) {
+            const newOrder = Array.from(evt.to.children).map(el => el.dataset.categoryName);
+            saveOrder('dishes', newOrder);
+        }});
+    }
+    const productSortable = document.getElementById('product-categories-sortable');
+    if (productSortable) {
+        new Sortable(productSortable, { animation: 150, ghostClass: 'sortable-ghost', onEnd: function (evt) {
+            const newOrder = Array.from(evt.to.children).map(el => el.dataset.categoryName);
+            saveOrder('products', newOrder);
+        }});
+    }
+</script>
+
+<!-- Nieuw script voor de grafieken -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const dashboardDataElement = document.getElementById('dashboard-data');
+    let topDishesChart;
+    let costDistributionChart;
+    const defaultColors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FFCD56', '#C9CBCF', '#3C8DBC', '#F56954'];
+
+    // --- Grafiek 1: Top Gerechten (dynamisch) ---
+    const topDishesCtx = document.getElementById('topDishesChart').getContext('2d');
+    const topDishesSortBy = document.getElementById('topDishesSortBy');
+    const topDishesCount = document.getElementById('topDishesCount');
+    const topDishesColorPickersContainer = document.getElementById('topDishesColorPickers');
+
+    function createColorPickers(container, labels, chartUpdateFn) {
+        container.innerHTML = ''; // Leegmaken voor nieuwe kiezers
+        labels.forEach((label, index) => {
+            const colorGroup = document.createElement('div');
+            colorGroup.className = 'color-picker-group';
+            
+            const colorLabel = document.createElement('label');
+            colorLabel.textContent = label;
+            colorLabel.htmlFor = `picker-${container.id}-${index}`;
+
+            const colorPicker = document.createElement('input');
+            colorPicker.type = 'color';
+            colorPicker.id = `picker-${container.id}-${index}`;
+            colorPicker.value = defaultColors[index % defaultColors.length];
+            colorPicker.addEventListener('input', chartUpdateFn);
+
+            colorGroup.appendChild(colorLabel);
+            colorGroup.appendChild(colorPicker);
+            container.appendChild(colorGroup);
         });
     }
 
-    const productSortable = document.getElementById('product-categories-sortable');
-    if (productSortable) {
-        new Sortable(productSortable, {
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: function (evt) {
-                const newOrder = Array.from(evt.to.children).map(el => el.dataset.categoryName);
-                saveOrder('products', newOrder);
-            },
-        });
+    async function updateTopDishesChart() {
+        const sortBy = topDishesSortBy.value;
+        const count = topDishesCount.value;
+        const url = `${dashboardDataElement.dataset.topDishesUrl}?sort_by=${sortBy}&count=${count}`;
+        
+        const response = await fetch(url);
+        const newData = await response.json();
+
+        // Maak of update kleurkiezers als de labels veranderen
+        const currentLabels = topDishesChart ? topDishesChart.data.labels : [];
+        if (JSON.stringify(currentLabels) !== JSON.stringify(newData.labels)) {
+            createColorPickers(topDishesColorPickersContainer, newData.labels, updateTopDishesChart);
+        }
+        
+        const colorPickers = topDishesColorPickersContainer.querySelectorAll('input[type="color"]');
+        const backgroundColors = Array.from(colorPickers).map(picker => picker.value);
+        const borderColors = backgroundColors.map(color => color); // Voor staven is dit meestal dezelfde kleur
+
+        const chartLabel = sortBy === 'profit' ? 'Winst (€)' : 'Kostprijs (€)';
+
+        if (topDishesChart) {
+            topDishesChart.data.labels = newData.labels;
+            topDishesChart.data.datasets[0].data = newData.data;
+            topDishesChart.data.datasets[0].label = chartLabel;
+            topDishesChart.data.datasets[0].backgroundColor = backgroundColors.map(c => hexToRgba(c, 0.7));
+            topDishesChart.data.datasets[0].borderColor = borderColors;
+            topDishesChart.update();
+        } else {
+            topDishesChart = new Chart(topDishesCtx, {
+                type: 'bar',
+                data: { 
+                    labels: newData.labels, 
+                    datasets: [{ 
+                        label: chartLabel, 
+                        data: newData.data, 
+                        backgroundColor: backgroundColors.map(c => hexToRgba(c, 0.7)), 
+                        borderColor: borderColors, 
+                        borderWidth: 1 
+                    }] 
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }
+            });
+        }
     }
+
+    function hexToRgba(hex, alpha = 1) { // Helper voor doorzichtigheid
+        let r = 0, g = 0, b = 0;
+        if (hex.length == 4) { r = "0x" + hex[1] + hex[1]; g = "0x" + hex[2] + hex[2]; b = "0x" + hex[3] + hex[3]; }
+        else if (hex.length == 7) { r = "0x" + hex[1] + hex[2]; g = "0x" + hex[3] + hex[4]; b = "0x" + hex[5] + hex[6]; }
+        return `rgba(${+r},${+g},${+b},${alpha})`;
+    }
+
+    topDishesSortBy.addEventListener('change', updateTopDishesChart);
+    topDishesCount.addEventListener('change', updateTopDishesChart);
+    updateTopDishesChart();
+
+    // --- Grafiek 2: Kostenverdeling per Categorie ---
+    const costDistributionCtx = document.getElementById('costDistributionChart').getContext('2d');
+    const costDistributionChartType = document.getElementById('costDistributionChartType');
+    const costDistributionColorPickersContainer = document.getElementById('costDistributionColorPickers');
+    const costDistributionData = JSON.parse(dashboardDataElement.dataset.costDistribution);
+
+    function updateCostDistributionChart() {
+        const chartType = costDistributionChartType.value;
+        const colorPickers = costDistributionColorPickersContainer.querySelectorAll('input[type="color"]');
+        const backgroundColors = Array.from(colorPickers).map(picker => picker.value);
+
+        if (costDistributionChart) {
+            costDistributionChart.destroy();
+        }
+        
+        if (costDistributionData.labels.length > 0) {
+            costDistributionChart = new Chart(costDistributionCtx, {
+                type: chartType,
+                data: {
+                    labels: costDistributionData.labels,
+                    datasets: [{
+                        label: 'Kosten per Categorie',
+                        data: costDistributionData.data,
+                        backgroundColor: backgroundColors,
+                        hoverOffset: 4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+    }
+    
+    // Maak de kleurkiezers voor de kostengrafiek aan bij het laden
+    createColorPickers(costDistributionColorPickersContainer, costDistributionData.labels, updateCostDistributionChart);
+    costDistributionChartType.addEventListener('change', updateCostDistributionChart);
+    updateCostDistributionChart();
 });
 </script>
 {% endblock %}
