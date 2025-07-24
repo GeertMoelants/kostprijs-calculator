@@ -27,16 +27,24 @@
         <button type="button" onclick="addIngredientRow()" class="button button-primary" style="margin-bottom: 20px;">Voeg Ingrediënt Toe</button>
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);">
 
-        <h3>Winstmarge</h3>
-        <div class="profit-margin-options">
-            <input type="radio" id="profit_percentage" name="profit_type" value="percentage" {% if dish.profit_type == 'percentage' %}checked{% endif %}>
-            <label for="profit_percentage">Percentage</label>
-            <input type="radio" id="profit_multiplier" name="profit_type" value="multiplier" {% if dish.profit_type == 'multiplier' %}checked{% endif %}>
-            <label for="profit_multiplier">Vermenigvuldiger</label>
-        </div>
-        <div class="profit-value-group">
-            <input type="number" step="0.01" id="profit_value" name="profit_value" value="{{ dish.profit_value }}" required>
-            <span id="profit-unit"></span>
+        <h3>Winstmarge & Prijzen</h3>
+        <div class="profit-and-price-container">
+            <div class="profit-controls">
+                <div class="profit-margin-options">
+                    <input type="radio" id="profit_percentage" name="profit_type" value="percentage" {% if dish.profit_type == 'percentage' %}checked{% endif %} onchange="updateTotals()">
+                    <label for="profit_percentage">Percentage</label>
+                    <input type="radio" id="profit_multiplier" name="profit_type" value="multiplier" {% if dish.profit_type == 'multiplier' %}checked{% endif %} onchange="updateTotals()">
+                    <label for="profit_multiplier">Vermenigvuldiger</label>
+                </div>
+                <div class="profit-value-group">
+                    <input type="number" step="0.01" id="profit_value" name="profit_value" value="{{ dish.profit_value }}" required oninput="updateTotals()">
+                    <span id="profit-unit"></span>
+                </div>
+            </div>
+            <div class="price-summary">
+                <p><strong>Totale Kostprijs:</strong> <span id="live-cost-price">€ 0,00</span></p>
+                <p><strong>Verkoopprijs:</strong> <span id="live-selling-price">€ 0,00</span></p>
+            </div>
         </div>
 
         <button type="submit" class="button button-success" style="margin-top: 20px;">Gerecht Opslaan</button>
@@ -54,11 +62,49 @@
 </div>
 
 <script>
-    // Data wordt ingelezen uit het HTML-element, wat linter-vriendelijk is.
+    // Data inlezen uit het HTML-element
     const pageDataElement = document.getElementById('page-data');
     const allProductCategories = JSON.parse(pageDataElement.dataset.productCategories);
     const existingIngredients = JSON.parse(pageDataElement.dataset.existingIngredients);
     const productsUrl = pageDataElement.dataset.productsUrl;
+
+    // Functie om een getal te formatteren als valuta
+    function formatAsCurrency(amount) {
+        return `€ ${amount.toFixed(2).replace('.', ',')}`;
+    }
+
+    // De centrale functie die alles berekent en bijwerkt
+    function updateTotals() {
+        let totalCost = 0;
+        const ingredientRows = document.querySelectorAll('.ingredient-row');
+        
+        ingredientRows.forEach(row => {
+            const productSelect = row.querySelector('.product-select');
+            const quantityInput = row.querySelector('input[name="quantity[]"]');
+            const selectedOption = productSelect.options[productSelect.selectedIndex];
+            
+            if (selectedOption && selectedOption.value) {
+                const unitPrice = parseFloat(selectedOption.getAttribute('data-unit-price')) || 0;
+                const quantity = parseFloat(quantityInput.value) || 0;
+                totalCost += unitPrice * quantity;
+            }
+        });
+
+        const profitType = document.querySelector('input[name="profit_type"]:checked').value;
+        const profitValue = parseFloat(document.getElementById('profit_value').value) || 0;
+        
+        let sellingPrice = totalCost;
+        if (profitType === 'percentage') {
+            sellingPrice = totalCost * (1 + profitValue / 100);
+            document.getElementById('profit-unit').textContent = "%";
+        } else { // multiplier
+            sellingPrice = totalCost * profitValue;
+            document.getElementById('profit-unit').textContent = "x";
+        }
+
+        document.getElementById('live-cost-price').textContent = formatAsCurrency(totalCost);
+        document.getElementById('live-selling-price').textContent = formatAsCurrency(sellingPrice);
+    }
 
     function addIngredientRow(ing = null) {
         const container = document.getElementById('ingredients-container');
@@ -75,15 +121,16 @@
         newRow.innerHTML = `
             ${categorySelectHtml}
             <select name="ingredient_product_id[]" class="product-select" onchange="updateUnitPrice(this)" disabled><option value="">-- Product --</option></select>
-            <input type="number" step="any" name="quantity[]" placeholder="Hoeveelheid" value="${ing ? ing.quantity : ''}" disabled>
+            <input type="number" step="any" name="quantity[]" placeholder="Hoeveelheid" value="${ing ? ing.quantity : ''}" disabled oninput="updateTotals()">
             <span class="unit-price-display">€ N/A</span>
-            <button type="button" class="button remove-btn" onclick="this.closest('.ingredient-row').remove()">X</button>
+            <button type="button" class="button remove-btn" onclick="this.closest('.ingredient-row').remove(); updateTotals();">X</button>
         `;
         container.appendChild(newRow);
 
         if (ing) {
             loadProducts(newRow.querySelector('.category-select'), ing.product_id);
         }
+        updateTotals(); // Herbereken na toevoegen
     }
 
     async function loadProducts(categorySelect, selectedProductId = null) {
@@ -118,6 +165,7 @@
                 console.error('Error loading products:', error);
             }
         }
+        updateTotals(); // Herbereken na laden van producten
     }
 
     function updateUnitPrice(productSelect) {
@@ -135,16 +183,7 @@
             unitPriceDisplay.textContent = '€ N/A';
             quantityInput.disabled = true;
         }
-    }
-
-    function toggleProfitInput() {
-        const profitType = document.querySelector('input[name="profit_type"]:checked').value;
-        document.getElementById('profit-unit').textContent = (profitType === 'percentage') ? "%" : "x";
-    }
-
-    function toggleNewDishCategoryInput() {
-        const categorySelect = document.getElementById('dish_category');
-        document.getElementById('new-dish-category-input-div').style.display = categorySelect.value === 'new_dish_category' ? 'block' : 'none';
+        updateTotals(); // Herbereken na selecteren van een product
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -153,8 +192,8 @@
         } else {
             addIngredientRow();
         }
-        toggleProfitInput();
-        document.querySelectorAll('input[name="profit_type"]').forEach(radio => radio.addEventListener('change', toggleProfitInput));
+        // De eerste berekening uitvoeren als de pagina geladen is
+        updateTotals();
     });
 </script>
 {% endblock %}
