@@ -28,8 +28,6 @@ except OSError:
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-    if '?sslmode' not in DATABASE_URL:
-        DATABASE_URL += "?sslmode=require"
 
 LOCAL_DB_URI = f"sqlite:///{os.path.join(app.instance_path, 'kostprijs.db')}"
 
