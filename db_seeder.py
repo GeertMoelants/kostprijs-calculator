@@ -25,32 +25,32 @@ def seed_data():
         # --- Seeding start hier ---
         
         # 1. Tabellen zonder afhankelijkheden
-        category_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'category.csv'), sep=';')
+        category_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'category.csv'))
         db.session.execute(Category.__table__.insert(), category_df.to_dict(orient='records'))
         print("✅ category.csv succesvol geseed.")
         
-        dish_category_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'dish_category.csv'), sep=';')
+        dish_category_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'dish_category.csv'))
         db.session.execute(DishCategory.__table__.insert(), dish_category_df.to_dict(orient='records'))
         print("✅ dish_category.csv succesvol geseed.")
         
-        supplier_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'supplier.csv'), sep=';')
+        supplier_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'supplier.csv'))
         db.session.execute(Supplier.__table__.insert(), supplier_df.to_dict(orient='records'))
         print("✅ supplier.csv succesvol geseed.")
 
         # 2. Producten
-        product_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'product.csv'), sep=';')
+        product_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'product.csv'))
         product_df = product_df.replace({np.nan: None})
         db.session.execute(Product.__table__.insert(), product_df.to_dict(orient='records'))
         print("✅ Producten succesvol geseed.")
 
         # 3. Gerechten
-        dish_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'dish.csv'), sep=';')
+        dish_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'dish.csv'))
         dish_df = dish_df.replace({np.nan: None})
         db.session.execute(Dish.__table__.insert(), dish_df.to_dict(orient='records'))
         print("✅ Gerechten succesvol geseed.")
 
         # 4. Ingrediënten
-        ingredient_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'ingredient.csv'), sep=';')
+        ingredient_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'ingredient.csv'))
         ingredient_df.rename(columns={'dish_id': 'parent_dish_id'}, inplace=True)
         ingredient_df = ingredient_df.replace({np.nan: None})
         
@@ -63,7 +63,6 @@ def seed_data():
         db.session.execute(Ingredient.__table__.insert(), ingredient_df.to_dict(orient='records'))
         print("✅ Ingrediënten succesvol geseed.")
         
-        # Voer alle bovenstaande inserts door met één commit
         db.session.commit()
         print("\n🎉 Database succesvol gevuld met de nieuwe data!")
 
