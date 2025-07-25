@@ -4,8 +4,6 @@
 __pycache__/
 *.pyc
 
-# csv files
-*.csv
 
 # Virtual environment
 env/

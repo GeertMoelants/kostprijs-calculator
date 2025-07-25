@@ -1,0 +1,6 @@
+"id","name","dish_category_id","profit_type","profit_value"
+"1","Baileys Moelleux","1","multiplier","3.5"
+"2","Chocolade Moelleux","1","multiplier","3.5"
+"3","Frambozen Moelleux","1","multiplier","3.5"
+"4","Smash Slider","2","multiplier","3.5"
+"5","Friet","3","multiplier","3.5"
