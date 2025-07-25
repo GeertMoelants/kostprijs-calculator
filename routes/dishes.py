@@ -70,36 +70,72 @@ def process_dish_form(dish):
                 # Negeer ongeldige rijen, of voeg logging toe indien gewenst
                 print(f"Skipping invalid ingredient row: {e}")
 
-@dish_bp.route('/dishes/create', methods=['GET', 'POST'])
+# routes/dishes.py
+
+@dish_bp.route('/create', methods=['GET', 'POST'])
 def create_dish():
-    """Pagina voor het aanmaken van een nieuw gerecht."""
-    if request.method == 'POST':
-        name = request.form.get('dish_name', '').strip()
-        if not name or Dish.query.filter_by(name=name).first():
-            flash(f"Gerechtnaam '{name}' is ongeldig of bestaat al.", "danger")
-            return redirect(url_for('dishes.create_dish'))
-        
-        new_dish = Dish(is_preparation=False)
-        process_dish_form(new_dish)
-        
-        db.session.add(new_dish)
-        db.session.commit()
-        flash(f"Gerecht '{new_dish.name}' succesvol aangemaakt!", "success")
-        return redirect(url_for('dishes.manage_dishes'))
-
-    # Data voorbereiden voor een leeg formulier
-    product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
-    product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
+    # Deze queries zijn nodig om het formulier op te bouwen
     dish_categories = DishCategory.query.order_by(DishCategory.name).all()
+    product_categories = Category.query.order_by(Category.name).all()
+    products = Product.query.order_by(Product.name).all()
     preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
-    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
 
+    if request.method == 'POST':
+        try:
+            # --- STAP 1: Maak het gerecht aan en sla het op ---
+            new_dish = Dish(
+                name=request.form['name'],
+                dish_category_id=request.form['dish_category_id'],
+                profit_type=request.form['profit_type'],
+                profit_value=float(request.form['profit_value'].replace(',', '.')) if request.form['profit_value'] else 0.0,
+                is_preparation=False # Een gerecht is geen bereiding
+            )
+            # Voeg toe en commit onmiddellijk om een ID te genereren
+            db.session.add(new_dish)
+            db.session.commit()
+
+            # --- STAP 2: Maak de ingrediënten aan en koppel ze aan het nieuwe gerecht ---
+            ingredient_types = request.form.getlist('ingredient_type[]')
+            ingredient_ids = request.form.getlist('ingredient_id[]')
+            quantities = request.form.getlist('quantity[]')
+
+            for i in range(len(ingredient_types)):
+                if quantities[i] and ingredient_ids[i]:
+                    quantity = float(quantities[i].replace(',', '.'))
+                    if quantity > 0:
+                        ingredient_id = int(ingredient_ids[i])
+                        ingredient_type = ingredient_types[i]
+
+                        # Maak een Ingredient-object en link het via het ID
+                        new_ingredient = Ingredient(
+                            parent_dish_id=new_dish.id, # Gebruik het ID van het zojuist gemaakte gerecht
+                            product_id=ingredient_id if ingredient_type == 'product' else None,
+                            preparation_id=ingredient_id if ingredient_type == 'preparation' else None,
+                            quantity=quantity
+                        )
+                        db.session.add(new_ingredient)
+            
+            # --- STAP 3: Commit de nieuwe ingrediënten ---
+            db.session.commit()
+            
+            flash(f"Gerecht '{new_dish.name}' succesvol aangemaakt!", 'success')
+            return redirect(url_for('dishes.manage_dishes'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Fout bij het aanmaken van het gerecht: {e}", 'danger')
+            return redirect(url_for('dishes.create_dish'))
+
+    # Voor de GET request, render de template
     return render_template(
-        'dish_form.html',
-        form_action=url_for('dishes.create_dish'),
-        all_product_categories_json=product_categories_json,
-        all_dish_categories=dish_categories,
-        all_preparations_json=preparations_json
+        'manage_dishes.html',
+        dish_to_edit=None, # Geen gerecht om te bewerken, we maken een nieuwe aan
+        dishes=Dish.query.order_by(Dish.name).all(),
+        categories=dish_categories,
+        product_categories=product_categories,
+        products=products,
+        preparations=preparations,
+        is_create_page=True # Een vlag om de template te vertellen dat dit de "create" pagina is
     )
 
 @dish_bp.route('/edit/<int:dish_id>', methods=['GET', 'POST'])
