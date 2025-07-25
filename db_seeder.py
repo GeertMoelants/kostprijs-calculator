@@ -8,8 +8,24 @@ def seed_data():
     print("Start seeding database from exported CSVs...")
 
     try:
-        # Belangrijk: lees de bestanden in de juiste volgorde om relatieproblemen te voorkomen
+        # Verwijder data in de JUISTE VOLGORDE
+        # 1. De koppeltabel/kindtabel
+        db.session.query(Ingredient).delete()
         
+        # 2. De tabellen die afhankelijkheden hadden
+        db.session.query(Dish).delete()
+        db.session.query(Product).delete()
+        
+        # 3. De topleveltabel
+        db.session.query(Category).delete()
+
+        # Commit alle verwijderingen in één keer
+        db.session.commit()
+        
+        print("Start seeding database from exported CSVs...")
+
+        
+        # Belangrijk: lees de bestanden in de juiste volgorde om relatieproblemen te voorkomen
         # 1. Tabellen zonder afhankelijkheden
         Category.query.delete()
         category_df = pd.read_csv('category.csv')
