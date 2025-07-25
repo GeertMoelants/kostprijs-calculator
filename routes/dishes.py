@@ -5,12 +5,13 @@ from category_order_manager import load_category_order, save_category_order
 
 dish_bp = Blueprint('dishes', __name__, template_folder='../templates')
 
-def get_or_create_dish_category(name):
+def get_or_create(model, name):
     """Hulpfunctie om een gerecht-categorie op te halen of aan te maken als deze niet bestaat."""
-    if not name: return None
-    instance = DishCategory.query.filter_by(name=name).first()
+    if not name: 
+        return None
+    instance = model.query.filter_by(name=name).first()
     if not instance:
-        instance = DishCategory(name=name)
+        instance = model(name=name)
         db.session.add(instance)
     return instance
 
@@ -36,7 +37,7 @@ def process_dish_form(dish):
         category_obj = DishCategory.query.get(cat_id)
         if category_obj:
             cat_name = category_obj.name
-    dish.dish_category = get_or_create_dish_category(cat_name)
+    dish.dish_category = get_or_create(cat_name)
 
     # --- GECORRIGEERDE LOGICA VOOR INGREDIËNTEN ---
     
@@ -138,7 +139,7 @@ def create_dish():
         is_create_page=True # Een vlag om de template te vertellen dat dit de "create" pagina is
     )
 
-@dish_bp.route('/edit/<int:dish_id>', methods=['GET', 'POST'])
+@dish_bp.route('/dishes/edit/<int:dish_id>', methods=['GET', 'POST'])
 def edit_dish(dish_id):
     dish = Dish.query.get_or_404(dish_id)
     # Query de juiste modellen voor het formulier
@@ -195,7 +196,7 @@ def edit_dish(dish_id):
 
     # Voor de GET request, render de template met de juiste data
     return render_template(
-        'manage_dishes.html',
+        'dishes_form.html',
         dish_to_edit=dish, 
         dishes=Dish.query.order_by(Dish.name).all(), 
         categories=dish_categories, 
