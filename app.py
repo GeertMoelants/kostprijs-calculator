@@ -126,8 +126,7 @@ def create_app():
             seed_data()
 
     return app
-
+app = create_app()
 # Deze code wordt uitgevoerd als je het script direct start
 if __name__ == '__main__':
-    app = create_app()
     app.run(debug=True, port=5001)
