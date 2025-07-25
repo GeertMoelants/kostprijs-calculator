@@ -5,22 +5,21 @@ from collections import OrderedDict
 from sqlalchemy import func
 import os
 import click
+from flask_migrate import Migrate # <-- NIEUWE IMPORT
 
 # Importeer de db instantie en de modellen
 from models import db, Product, Dish, Category as ProductCategory, DishCategory, Ingredient, PreparationCategory
 from category_order_manager import load_category_order
-from db_seeder import seed_data # Importeer de seeder functie
+from db_seeder import seed_data
 
 # Importeer de blueprints
 from routes.products import product_bp
 from routes.dishes import dish_bp
-from routes.preparations import preparation_bp # <-- NIEUWE IMPORT
+from routes.preparations import preparation_bp
 
-# Maak de Flask app aan, en specificeer de instance folder
 app = Flask(__name__, instance_relative_config=True)
 
 # --- Database Configuratie & Geheime Sleutel ---
-# Zorg ervoor dat de instance map bestaat
 try:
     os.makedirs(app.instance_path)
 except OSError:
@@ -32,20 +31,19 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     if '?sslmode' not in DATABASE_URL:
         DATABASE_URL += "?sslmode=require"
 
-# Gebruik de instance map voor de lokale database
 LOCAL_DB_URI = f"sqlite:///{os.path.join(app.instance_path, 'kostprijs.db')}"
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or LOCAL_DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = os.environ.get('SECRET_KEY', 'een-simpele-maar-veilige-lokale-sleutel')
 
-# Initialiseer de database met de app
 db.init_app(app)
+migrate = Migrate(app, db) # <-- NIEUWE INITIALISATIE
 
-# Registreer de blueprints bij de applicatie
+# Registreer de blueprints
 app.register_blueprint(product_bp)
 app.register_blueprint(dish_bp)
-app.register_blueprint(preparation_bp) # <-- NIEUWE REGISTRATIE
+app.register_blueprint(preparation_bp)
 
 # --- Custom Jinja2 Filters ---
 @app.template_filter('format_currency')
@@ -85,6 +83,7 @@ def top_dishes_api():
 # --- Hoofdroute ---
 @app.route('/')
 def index():
+    # ... (deze functie blijft ongewijzigd) ...
     all_dish_categories = DishCategory.query.join(Dish).filter(Dish.is_preparation == False).distinct().order_by(DishCategory.name).all()
     
     cost_per_category_query = db.session.query(
@@ -132,12 +131,6 @@ def index():
     )
 
 # --- CLI Commando's voor Database Beheer ---
-@app.cli.command("init-db")
-def init_db_command():
-    """Maakt de databasetabellen aan."""
-    db.create_all()
-    print("✅ Database tabellen succesvol aangemaakt.")
-
 @app.cli.command("seed-db")
 def seed_db_command():
     """Vult de database met initiële data uit CSV-bestanden."""
