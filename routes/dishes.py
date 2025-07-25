@@ -22,11 +22,12 @@ def manage_dishes():
 
 def process_dish_form(dish):
     """Hulpfunctie om de formulierdata voor een gerecht te verwerken."""
+    # Werk de basisgegevens van het gerecht bij
     dish.name = request.form.get('dish_name', '').strip()
     dish.profit_type = request.form['profit_type']
     dish.profit_value = request.form.get('profit_value', type=float)
 
-    # Verwerk de categorie
+    # Verwerk de categorie van het gerecht
     cat_id = request.form.get('dish_category')
     cat_name = ''
     if cat_id == 'new_dish_category':
@@ -37,21 +38,37 @@ def process_dish_form(dish):
             cat_name = category_obj.name
     dish.dish_category = get_or_create_dish_category(cat_name)
 
-    # Verwerk de ingrediënten
-    Ingredient.query.filter_by(parent_dish_id=dish.id).delete()
+    # --- GECORRIGEERDE LOGICA VOOR INGREDIËNTEN ---
+    
+    # Stap 1: Verwijder de oude ingrediënten die bij dit gerecht horen.
+    # De 'synchronize_session=False' optie is een best practice voor bulk deletes.
+    Ingredient.query.filter_by(parent_dish_id=dish.id).delete(synchronize_session=False)
+
+    # Stap 2: Voeg de ingrediënten uit het formulier toe als nieuwe objecten.
     ingredient_types = request.form.getlist('ingredient_type[]')
     ingredient_ids = request.form.getlist('ingredient_id[]')
     quantities = request.form.getlist('quantity[]')
 
     for type, id_str, qty_str in zip(ingredient_types, ingredient_ids, quantities):
         if id_str and qty_str:
-            quantity = float(qty_str.replace(',', '.'))
-            if quantity > 0:
-                ingredient_id = int(id_str)
-                if type == 'product':
-                    dish.ingredients.append(Ingredient(product_id=ingredient_id, quantity=quantity))
-                elif type == 'preparation':
-                    dish.ingredients.append(Ingredient(preparation_id=ingredient_id, quantity=quantity))
+            try:
+                quantity = float(qty_str.replace(',', '.'))
+                if quantity > 0:
+                    ingredient_id = int(id_str)
+                    
+                    # Maak een volledig nieuw Ingredient object aan.
+                    # Geef geen 'id' mee; de database wijst deze zelf toe.
+                    new_ingredient = Ingredient(
+                        parent_dish_id=dish.id, # Link het aan het huidige gerecht
+                        product_id=ingredient_id if type == 'product' else None,
+                        preparation_id=ingredient_id if type == 'preparation' else None,
+                        quantity=quantity
+                    )
+                    # Voeg het nieuwe object toe aan de sessie.
+                    db.session.add(new_ingredient)
+            except (ValueError, TypeError) as e:
+                # Negeer ongeldige rijen, of voeg logging toe indien gewenst
+                print(f"Skipping invalid ingredient row: {e}")
 
 @dish_bp.route('/dishes/create', methods=['GET', 'POST'])
 def create_dish():
