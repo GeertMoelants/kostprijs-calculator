@@ -12,3 +12,6 @@ venv/
 # IDE / Editor-specifieke bestanden
 .vscode/
 .idea/
+
+# Lokale db
+instance/
