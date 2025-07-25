@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Bereidingen Beheren{% endblock %}
+
+{% block content %}
+    <h2>Bereidingen Beheer</h2>
+
+    <a href="{{ url_for('preparations.create_preparation') }}" class="button-link success">Nieuwe Bereiding Maken</a>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Naam van Bereiding</th>
+                <th>Kostprijs per Eenheid</th>
+                <th>Acties</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prep in preparations %}
+            <tr>
+                <td>{{ prep.name }}</td>
+                <td>€ {{ prep.cost_price_calculated | format_currency(2) }} / {{ prep.yield_unit }}</td>
+                <td>
+                    <a href="{{ url_for('preparations.edit_preparation', prep_id=prep.id) }}" class="button-link primary">Bewerken</a>
+                    <form action="{{ url_for('preparations.delete_preparation', prep_id=prep.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ prep.name }} wilt verwijderen?');">Verwijderen</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3">Geen bereidingen gevonden.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

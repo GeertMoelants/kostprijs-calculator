@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Bereiding Bewerken' if preparation else 'Nieuwe Bereiding Maken' }}{% endblock %}
+
+{% block content %}
+    <h2>{{ 'Bereiding Bewerken: ' + preparation.name if preparation else 'Nieuwe Bereiding Maken' }}</h2>
+
+    <form action="{{ form_action }}" method="POST">
+        <label for="name">Naam van de bereiding:</label>
+        <input type="text" id="name" name="name" value="{{ preparation.name if preparation else '' }}" required>
+        
+        <label for="preparation_category">Categorie van de bereiding:</label>
+        <select id="preparation_category" name="preparation_category" onchange="toggleNewCategoryInput()" required>
+            <option value="">-- Selecteer of voeg nieuwe toe --</option>
+            {% for category in all_prep_categories %}
+                <option value="{{ category.id }}" {% if preparation and preparation.preparation_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+            {% endfor %}
+            <option value="new_category">-- Nieuwe Categorie Toevoegen --</option>
+        </select>
+        <div id="new-category-input-div" style="display:none; margin-bottom: 20px;">
+            <label for="new_category_name">Nieuwe Categorie Naam:</label>
+            <input type="text" id="new_category_name" name="new_category_name" placeholder="Bv. Sauzen, Degen...">
+        </div>
+
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div style="flex: 1;">
+                <label for="yield_quantity">Opbrengst Hoeveelheid (bv. 1.5):</label>
+                <input type="number" step="any" id="yield_quantity" name="yield_quantity" value="{{ preparation.yield_quantity if preparation else '' }}" required>
+            </div>
+            <div style="flex: 1;">
+                <label for="yield_unit">Opbrengst Eenheid (bv. L, Kg, Stuks):</label>
+                <input type="text" id="yield_unit" name="yield_unit" value="{{ preparation.yield_unit if preparation else '' }}" required>
+            </div>
+        </div>
+        
+        <h3>Ingrediënten (alleen basisproducten)</h3>
+        <div id="ingredients-container"></div>
+        <button type="button" onclick="addIngredientRow()" class="button button-primary" style="margin-bottom: 20px;">Voeg Ingrediënt Toe</button>
+        
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);">
+
+        <button type="submit" class="button success" style="margin-top: 20px;">Bereiding Opslaan</button>
+        <a href="{{ url_for('preparations.manage_preparations') }}" class="back-link">Terug naar Bereidingen</a>
+    </form>
+{% endblock %}
+
+{% block scripts %}
+<div id="page-data" 
+     data-product-categories='{{ all_product_categories_json | tojson }}'
+     data-existing-ingredients='{{ ingredients_data | tojson if ingredients_data else "[]" }}'
+     data-products-url="{{ url_for('products.get_products_by_category_json') }}"
+     style="display: none;">
+</div>
+
+<script>
+    const pageDataElement = document.getElementById('page-data');
+    const allProductCategories = JSON.parse(pageDataElement.dataset.productCategories);
+    const existingIngredients = JSON.parse(pageDataElement.dataset.existingIngredients);
+    const productsUrl = pageDataElement.dataset.productsUrl;
+
+    function toggleNewCategoryInput() {
+        const categorySelect = document.getElementById('preparation_category');
+        const newCategoryDiv = document.getElementById('new-category-input-div');
+        newCategoryDiv.style.display = categorySelect.value === 'new_category' ? 'block' : 'none';
+    }
+
+    function addIngredientRow(ing = null) {
+        const container = document.getElementById('ingredients-container');
+        const newRow = document.createElement('div');
+        newRow.classList.add('ingredient-row');
+
+        let categorySelectHtml = '<select class="category-select" onchange="loadProducts(this)"><option value="">-- Product Categorie --</option>';
+        allProductCategories.forEach(category => {
+            const selected = ing && ing.category_id == category.id ? 'selected' : '';
+            categorySelectHtml += `<option value="${category.id}" ${selected}>${category.name}</option>`;
+        });
+        categorySelectHtml += '</select>';
+
+        newRow.innerHTML = `
+            ${categorySelectHtml}
+            <select name="ingredient_product_id[]" class="product-select" onchange="updateUnitPrice(this)" disabled><option value="">-- Product --</option></select>
+            <input type="number" step="any" name="quantity[]" placeholder="Hoeveelheid" value="${ing ? ing.quantity : ''}" disabled>
+            <span class="unit-price-display">€ N/A</span>
+            <button type="button" class="button remove-btn" onclick="this.closest('.ingredient-row').remove()">X</button>
+        `;
+        container.appendChild(newRow);
+
+        if (ing) {
+            loadProducts(newRow.querySelector('.category-select'), ing.product_id);
+        }
+    }
+
+    async function loadProducts(categorySelect, selectedProductId = null) {
+        const categoryId = categorySelect.value;
+        const row = categorySelect.closest('.ingredient-row');
+        const productSelect = row.querySelector('.product-select');
+        const quantityInput = row.querySelector('input[name="quantity[]"]');
+        
+        productSelect.innerHTML = '<option value="">-- Product --</option>';
+        productSelect.disabled = true;
+        quantityInput.disabled = true;
+
+        if (categoryId) {
+            try {
+                const url = `${productsUrl}?category_id=${categoryId}`;
+                const response = await fetch(url);
+                const products = await response.json();
+                products.forEach(product => {
+                    const option = document.createElement('option');
+                    option.value = product.id;
+                    option.setAttribute('data-unit-price', product.unit_price_calculated);
+                    option.setAttribute('data-package-unit', product.package_unit);
+                    option.textContent = product.name;
+                    if (selectedProductId && product.id == selectedProductId) {
+                        option.selected = true;
+                    }
+                    productSelect.appendChild(option);
+                });
+                productSelect.disabled = false;
+                updateUnitPrice(productSelect);
+            } catch (error) {
+                console.error('Error loading products:', error);
+            }
+        }
+    }
+
+    function updateUnitPrice(productSelect) {
+        const selectedOption = productSelect.options[productSelect.selectedIndex];
+        const row = productSelect.closest('.ingredient-row');
+        const quantityInput = row.querySelector('input[name="quantity[]"]');
+        const unitPriceDisplay = row.querySelector('.unit-price-display');
+
+        if (selectedOption && selectedOption.value) {
+            const unitPrice = selectedOption.getAttribute('data-unit-price');
+            const packageUnit = selectedOption.getAttribute('data-package-unit');
+            unitPriceDisplay.textContent = (unitPrice != null) ? `€ ${parseFloat(unitPrice).toFixed(2).replace('.', ',')}/${packageUnit || ''}` : '€ N/A';
+            quantityInput.disabled = false;
+        } else {
+            unitPriceDisplay.textContent = '€ N/A';
+            quantityInput.disabled = true;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleNewCategoryInput();
+        if (existingIngredients && existingIngredients.length > 0) {
+            existingIngredients.forEach(ing => addIngredientRow(ing));
+        } else {
+            addIngredientRow();
+        }
+    });
+</script>
+{% endblock %}

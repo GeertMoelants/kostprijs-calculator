@@ -7,27 +7,33 @@ import os
 import click
 
 # Importeer de db instantie en de modellen
-from models import db, Product, Dish, Category as ProductCategory, DishCategory, Ingredient
+from models import db, Product, Dish, Category as ProductCategory, DishCategory, Ingredient, PreparationCategory
 from category_order_manager import load_category_order
 from db_seeder import seed_data # Importeer de seeder functie
 
 # Importeer de blueprints
 from routes.products import product_bp
 from routes.dishes import dish_bp
+from routes.preparations import preparation_bp # <-- NIEUWE IMPORT
 
-app = Flask(__name__)
+# Maak de Flask app aan, en specificeer de instance folder
+app = Flask(__name__, instance_relative_config=True)
 
-# --- Database Configuratie ---
+# --- Database Configuratie & Geheime Sleutel ---
+# Zorg ervoor dat de instance map bestaat
+try:
+    os.makedirs(app.instance_path)
+except OSError:
+    pass
+
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Corrigeer de URL voor SQLAlchemy 1.4+ en voeg sslmode toe
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
     if '?sslmode' not in DATABASE_URL:
         DATABASE_URL += "?sslmode=require"
 
-# Lokale fallback
-LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'kostprijs.db')
-LOCAL_DB_URI = f'sqlite:///{LOCAL_DB_PATH}'
+# Gebruik de instance map voor de lokale database
+LOCAL_DB_URI = f"sqlite:///{os.path.join(app.instance_path, 'kostprijs.db')}"
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or LOCAL_DB_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -39,6 +45,7 @@ db.init_app(app)
 # Registreer de blueprints bij de applicatie
 app.register_blueprint(product_bp)
 app.register_blueprint(dish_bp)
+app.register_blueprint(preparation_bp) # <-- NIEUWE REGISTRATIE
 
 # --- Custom Jinja2 Filters ---
 @app.template_filter('format_currency')
@@ -61,10 +68,9 @@ def format_number_flexible(value):
 # --- API Route voor de Top Gerechten Grafiek ---
 @app.route('/api/top_dishes')
 def top_dishes_api():
-    # ... (deze functie blijft ongewijzigd) ...
     sort_by = request.args.get('sort_by', 'cost_price')
     count = request.args.get('count', 5, type=int)
-    all_dishes = Dish.query.all()
+    all_dishes = Dish.query.filter_by(is_preparation=False).all()
     if sort_by == 'profit':
         sorted_dishes = sorted(all_dishes, key=lambda d: d.selling_price_calculated - d.cost_price_calculated, reverse=True)
     else:
@@ -79,7 +85,8 @@ def top_dishes_api():
 # --- Hoofdroute ---
 @app.route('/')
 def index():
-    # ... (deze functie blijft ongewijzigd) ...
+    all_dish_categories = DishCategory.query.join(Dish).filter(Dish.is_preparation == False).distinct().order_by(DishCategory.name).all()
+    
     cost_per_category_query = db.session.query(
         ProductCategory.name,
         func.sum(Ingredient.quantity * (Product.package_price / Product.package_weight))
@@ -96,7 +103,6 @@ def index():
     }
 
     category_orders = load_category_order()
-    all_dish_categories = DishCategory.query.order_by(DishCategory.name).all()
     sorted_dish_category_names = [cat.name for cat in all_dish_categories]
     custom_sorted_dish_names = [name for name in category_orders.get('dishes', []) if name in sorted_dish_category_names]
     custom_sorted_dish_names += [name for name in sorted_dish_category_names if name not in custom_sorted_dish_names]
@@ -104,7 +110,9 @@ def index():
     for cat_name in custom_sorted_dish_names:
         category = next((cat for cat in all_dish_categories if cat.name == cat_name), None)
         if category:
-            composed_dishes_by_category[cat_name] = category.dishes
+            dishes_in_cat = [d for d in category.dishes if not d.is_preparation]
+            if dishes_in_cat:
+                composed_dishes_by_category[cat_name] = dishes_in_cat
 
     all_product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
     sorted_product_category_names = [cat.name for cat in all_product_categories]
@@ -123,18 +131,17 @@ def index():
         products_by_category=products_by_category
     )
 
-# --- Nieuwe CLI Commando's voor Database Beheer ---
+# --- CLI Commando's voor Database Beheer ---
 @app.cli.command("init-db")
 def init_db_command():
     """Maakt de databasetabellen aan."""
     db.create_all()
-    print("Database tabellen aangemaakt.")
+    print("✅ Database tabellen succesvol aangemaakt.")
 
 @app.cli.command("seed-db")
 def seed_db_command():
     """Vult de database met initiële data uit CSV-bestanden."""
     seed_data()
-    print("Database gevuld met initiële data.")
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

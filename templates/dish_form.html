@@ -1,44 +1,45 @@
 {% extends "base.html" %}
 
-{% block title %}Gerecht Bewerken{% endblock %}
+{% block title %}{{ 'Gerecht Bewerken' if dish else 'Nieuw Gerecht Samenstellen' }}{% endblock %}
 
 {% block content %}
-    <h2>Gerecht Bewerken: {{ dish.name }}</h2>
+    <h2>{{ 'Gerecht Bewerken: ' + dish.name if dish else 'Nieuw Gerecht Samenstellen' }}</h2>
 
     <form action="{{ form_action }}" method="POST">
         <label for="dish_name">Naam van het gerecht:</label>
-        <input type="text" id="dish_name" name="dish_name" value="{{ dish.name }}" required>
+        <input type="text" id="dish_name" name="dish_name" value="{{ dish.name if dish else '' }}" required>
         
         <label for="dish_category">Categorie van het gerecht:</label>
         <select id="dish_category" name="dish_category" onchange="toggleNewDishCategoryInput()" required>
             <option value="">-- Selecteer of voeg nieuwe toe --</option>
             {% for category in all_dish_categories %}
-                <option value="{{ category.id }}" {% if dish.dish_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+                <option value="{{ category.id }}" {% if dish and dish.dish_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
             {% endfor %}
             <option value="new_dish_category">-- Nieuwe Categorie Toevoegen --</option>
         </select>
         <div id="new-dish-category-input-div" style="display:none; margin-bottom: 20px;">
-            <label for="new_dish_category_name">Nieuwe Gerecht Categorie Naam:</label>
-            <input type="text" id="new_dish_category_name" name="new_dish_category_name" placeholder="Bv. Hoofdgerechten, Desserts...">
+            <label for="new_category_name">Nieuwe Gerecht Categorie Naam:</label>
+            <input type="text" id="new_category_name" name="new_category_name" placeholder="Bv. Hoofdgerechten, Desserts...">
         </div>
-
+        
         <h3>Ingrediënten</h3>
         <div id="ingredients-container"></div>
         <button type="button" onclick="addIngredientRow()" class="button button-primary" style="margin-bottom: 20px;">Voeg Ingrediënt Toe</button>
+        
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);">
 
         <h3>Winstmarge & Prijzen</h3>
         <div class="profit-and-price-container">
             <div class="profit-controls">
                 <div class="profit-margin-options">
-                    <input type="radio" id="profit_percentage" name="profit_type" value="percentage" {% if dish.profit_type == 'percentage' %}checked{% endif %} onchange="updateTotals()">
+                    <input type="radio" id="profit_percentage" name="profit_type" value="percentage" {% if not dish or dish.profit_type == 'percentage' %}checked{% endif %} onchange="updateTotals()">
                     <label for="profit_percentage">Percentage</label>
-                    <input type="radio" id="profit_multiplier" name="profit_type" value="multiplier" {% if dish.profit_type == 'multiplier' %}checked{% endif %} onchange="updateTotals()">
+                    <input type="radio" id="profit_multiplier" name="profit_type" value="multiplier" {% if dish and dish.profit_type == 'multiplier' %}checked{% endif %} onchange="updateTotals()">
                     <label for="profit_multiplier">Vermenigvuldiger</label>
                 </div>
                 <div class="profit-value-group">
-                    <input type="number" step="0.01" id="profit_value" name="profit_value" value="{{ dish.profit_value }}" required oninput="updateTotals()">
-                    <span id="profit-unit"></span>
+                    <input type="number" step="0.01" id="profit_value" name="profit_value" value="{{ dish.profit_value if dish else 0 }}" required oninput="updateTotals()">
+                    <span id="profit-unit">%</span>
                 </div>
             </div>
             <div class="price-summary">
@@ -47,101 +48,84 @@
             </div>
         </div>
 
-        <button type="submit" class="button button-success" style="margin-top: 20px;">Gerecht Opslaan</button>
-        <a class="button button-secondary" style="margin-top: 20px;" href="{{ url_for('dishes.manage_dishes') }}">Terug naar Gerechten</a>
+        <button type="submit" class="button success" style="margin-top: 20px;">{{ 'Gerecht Opslaan' if dish else 'Gerecht Aanmaken' }}</button>
+        <a href="{{ url_for('dishes.manage_dishes') }}" class="back-link">Terug naar Gerechten</a>
     </form>
 {% endblock %}
 
 {% block scripts %}
-<!-- Data wordt hier veilig geïnjecteerd in een onzichtbaar div-element -->
 <div id="page-data" 
      data-product-categories='{{ all_product_categories_json | tojson }}'
-     data-existing-ingredients='{{ ingredients_data | tojson }}'
+     data-preparations='{{ all_preparations_json | tojson }}'
+     data-existing-ingredients='{{ ingredients_data | tojson if ingredients_data else "[]" }}'
      data-products-url="{{ url_for('products.get_products_by_category_json') }}"
      style="display: none;">
 </div>
 
 <script>
-    // Data inlezen uit het HTML-element
-    const pageDataElement = document.getElementById('page-data');
-    const allProductCategories = JSON.parse(pageDataElement.dataset.productCategories);
-    const existingIngredients = JSON.parse(pageDataElement.dataset.existingIngredients);
-    const productsUrl = pageDataElement.dataset.productsUrl;
-
-    // Functie om een getal te formatteren als valuta
-    function formatAsCurrency(amount) {
-        return `€ ${amount.toFixed(2).replace('.', ',')}`;
-    }
-
-    // De centrale functie die alles berekent en bijwerkt
-    function updateTotals() {
-        let totalCost = 0;
-        const ingredientRows = document.querySelectorAll('.ingredient-row');
-        
-        ingredientRows.forEach(row => {
-            const productSelect = row.querySelector('.product-select');
-            const quantityInput = row.querySelector('input[name="quantity[]"]');
-            const selectedOption = productSelect.options[productSelect.selectedIndex];
-            
-            if (selectedOption && selectedOption.value) {
-                const unitPrice = parseFloat(selectedOption.getAttribute('data-unit-price')) || 0;
-                const quantity = parseFloat(quantityInput.value) || 0;
-                totalCost += unitPrice * quantity;
-            }
-        });
-
-        const profitType = document.querySelector('input[name="profit_type"]:checked').value;
-        const profitValue = parseFloat(document.getElementById('profit_value').value) || 0;
-        
-        let sellingPrice = totalCost;
-        if (profitType === 'percentage') {
-            sellingPrice = totalCost * (1 + profitValue / 100);
-            document.getElementById('profit-unit').textContent = "%";
-        } else { // multiplier
-            sellingPrice = totalCost * profitValue;
-            document.getElementById('profit-unit').textContent = "x";
-        }
-
-        document.getElementById('live-cost-price').textContent = formatAsCurrency(totalCost);
-        document.getElementById('live-selling-price').textContent = formatAsCurrency(sellingPrice);
-    }
+    const pageData = document.getElementById('page-data').dataset;
+    const allProductCategories = JSON.parse(pageData.productCategories);
+    const allPreparations = JSON.parse(pageData.preparations);
+    const existingIngredients = JSON.parse(pageData.existingIngredients);
+    const productsUrl = pageData.productsUrl;
 
     function addIngredientRow(ing = null) {
         const container = document.getElementById('ingredients-container');
         const newRow = document.createElement('div');
         newRow.classList.add('ingredient-row');
-
-        let categorySelectHtml = '<select class="category-select" onchange="loadProducts(this)"><option value="">-- Product Categorie --</option>';
-        allProductCategories.forEach(category => {
-            const selected = ing && ing.category_id == category.id ? 'selected' : '';
-            categorySelectHtml += `<option value="${category.id}" ${selected}>${category.name}</option>`;
-        });
-        categorySelectHtml += '</select>';
+        
+        const isProduct = ing ? !!ing.product_id : true;
 
         newRow.innerHTML = `
-            ${categorySelectHtml}
-            <select name="ingredient_product_id[]" class="product-select" onchange="updateUnitPrice(this)" disabled><option value="">-- Product --</option></select>
-            <input type="number" step="any" name="quantity[]" placeholder="Hoeveelheid" value="${ing ? ing.quantity : ''}" disabled oninput="updateTotals()">
+            <select class="ingredient-type-select" onchange="toggleSourceSelect(this)">
+                <option value="product" ${isProduct ? 'selected' : ''}>Basisproduct</option>
+                <option value="preparation" ${!isProduct ? 'selected' : ''}>Bereiding</option>
+            </select>
+            <div class="source-container"></div>
+            <input type="number" step="any" name="quantity[]" placeholder="Hoeveelheid" value="${ing ? ing.quantity : ''}" oninput="updateTotals()">
             <span class="unit-price-display">€ N/A</span>
             <button type="button" class="button remove-btn" onclick="this.closest('.ingredient-row').remove(); updateTotals();">X</button>
         `;
         container.appendChild(newRow);
-
-        if (ing) {
-            loadProducts(newRow.querySelector('.category-select'), ing.product_id);
-        }
-        updateTotals(); // Herbereken na toevoegen
+        toggleSourceSelect(newRow.querySelector('.ingredient-type-select'), ing);
     }
 
+    function toggleSourceSelect(typeSelect, ing = null) {
+        const sourceContainer = typeSelect.closest('.ingredient-row').querySelector('.source-container');
+        const type = typeSelect.value;
+        let html = '';
+
+        if (type === 'product') {
+            html = `<select class="category-select" onchange="loadProducts(this)"><option value="">-- Categorie --</option>`;
+            allProductCategories.forEach(cat => {
+                const selected = ing && ing.category_id == cat.id ? 'selected' : '';
+                html += `<option value="${cat.id}" ${selected}>${cat.name}</option>`;
+            });
+            html += `</select><select name="ingredient_id[]" class="product-select" onchange="updateUnitPrice(this)" disabled><option>-- Product --</option></select><input type="hidden" name="ingredient_type[]" value="product">`;
+        } else if (type === 'preparation') {
+            html = `<select name="ingredient_id[]" class="preparation-select" onchange="updateUnitPrice(this)"><option value="">-- Bereiding --</option>`;
+            allPreparations.forEach(prep => {
+                const selected = ing && ing.preparation_id == prep.id ? 'selected' : '';
+                html += `<option value="${prep.id}" data-unit-price="${prep.unit_price_calculated}" data-package-unit="${prep.unit}" ${selected}>${prep.name}</option>`;
+            });
+            html += `</select><input type="hidden" name="ingredient_type[]" value="preparation">`;
+        }
+        sourceContainer.innerHTML = html;
+        
+        if (ing && ing.product_id) {
+            loadProducts(sourceContainer.querySelector('.category-select'), ing.product_id);
+        } else {
+            updateUnitPrice(sourceContainer.querySelector('select'));
+        }
+    }
+    
     async function loadProducts(categorySelect, selectedProductId = null) {
         const categoryId = categorySelect.value;
         const row = categorySelect.closest('.ingredient-row');
         const productSelect = row.querySelector('.product-select');
-        const quantityInput = row.querySelector('input[name="quantity[]"]');
         
         productSelect.innerHTML = '<option value="">-- Product --</option>';
         productSelect.disabled = true;
-        quantityInput.disabled = true;
 
         if (categoryId) {
             try {
@@ -161,38 +145,73 @@
                 });
                 productSelect.disabled = false;
                 updateUnitPrice(productSelect);
-            } catch (error) {
-                console.error('Error loading products:', error);
-            }
+            } catch (error) { console.error('Error loading products:', error); }
+        } else {
+            updateUnitPrice(productSelect);
         }
-        updateTotals(); // Herbereken na laden van producten
     }
 
-    function updateUnitPrice(productSelect) {
-        const selectedOption = productSelect.options[productSelect.selectedIndex];
-        const row = productSelect.closest('.ingredient-row');
-        const quantityInput = row.querySelector('input[name="quantity[]"]');
+    function updateUnitPrice(selectElement) {
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        const row = selectElement.closest('.ingredient-row');
         const unitPriceDisplay = row.querySelector('.unit-price-display');
 
         if (selectedOption && selectedOption.value) {
             const unitPrice = selectedOption.getAttribute('data-unit-price');
             const packageUnit = selectedOption.getAttribute('data-package-unit');
             unitPriceDisplay.textContent = (unitPrice != null) ? `€ ${parseFloat(unitPrice).toFixed(2).replace('.', ',')}/${packageUnit || ''}` : '€ N/A';
-            quantityInput.disabled = false;
         } else {
             unitPriceDisplay.textContent = '€ N/A';
-            quantityInput.disabled = true;
         }
-        updateTotals(); // Herbereken na selecteren van een product
+        updateTotals();
+    }
+    
+    function formatAsCurrency(amount) {
+        return `€ ${amount.toFixed(2).replace('.', ',')}`;
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-        if (existingIngredients && existingIngredients.length > 0) {
+    function updateTotals() {
+        let totalCost = 0;
+        document.querySelectorAll('.ingredient-row').forEach(row => {
+            const sourceSelect = row.querySelector('.source-container select');
+            const quantityInput = row.querySelector('input[name="quantity[]"]');
+            
+            if (sourceSelect && sourceSelect.value) {
+                const selectedOption = sourceSelect.options[sourceSelect.selectedIndex];
+                const unitPrice = parseFloat(selectedOption.getAttribute('data-unit-price')) || 0;
+                const quantity = parseFloat(quantityInput.value) || 0;
+                totalCost += unitPrice * quantity;
+            }
+        });
+
+        const profitType = document.querySelector('input[name="profit_type"]:checked').value;
+        const profitValue = parseFloat(document.getElementById('profit_value').value) || 0;
+        let sellingPrice = totalCost;
+
+        if (profitType === 'percentage') {
+            sellingPrice = totalCost * (1 + profitValue / 100);
+            document.getElementById('profit-unit').textContent = "%";
+        } else {
+            sellingPrice = totalCost * profitValue;
+            document.getElementById('profit-unit').textContent = "x";
+        }
+
+        document.getElementById('live-cost-price').textContent = formatAsCurrency(totalCost);
+        document.getElementById('live-selling-price').textContent = formatAsCurrency(sellingPrice);
+    }
+    
+    function toggleNewDishCategoryInput() {
+        const categorySelect = document.getElementById('dish_category');
+        const newCategoryDiv = document.getElementById('new-dish-category-input-div');
+        newCategoryDiv.style.display = categorySelect.value === 'new_dish_category' ? 'block' : 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (existingIngredients.length > 0) {
             existingIngredients.forEach(ing => addIngredientRow(ing));
         } else {
             addIngredientRow();
         }
-        // De eerste berekening uitvoeren als de pagina geladen is
         updateTotals();
     });
 </script>

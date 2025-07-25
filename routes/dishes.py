@@ -1,131 +1,138 @@
 # routes/dishes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from models import db, Dish, DishCategory, Product, Ingredient, Category as ProductCategory
+from models import db, Dish, DishCategory, Product, Ingredient, Category as ProductCategory, PreparationCategory
 from category_order_manager import load_category_order, save_category_order
 
 dish_bp = Blueprint('dishes', __name__, template_folder='../templates')
 
-def get_or_create(model, name):
-    """Hulpfunctie om een object op te halen of aan te maken als het niet bestaat."""
-    if not name:
-        return None
-    instance = model.query.filter_by(name=name).first()
+def get_or_create_dish_category(name):
+    """Hulpfunctie om een gerecht-categorie op te halen of aan te maken als deze niet bestaat."""
+    if not name: return None
+    instance = DishCategory.query.filter_by(name=name).first()
     if not instance:
-        instance = model(name=name)
+        instance = DishCategory(name=name)
         db.session.add(instance)
     return instance
 
 @dish_bp.route('/manage_dishes')
 def manage_dishes():
-    dishes = Dish.query.order_by(Dish.name).all()
+    """Toont een overzicht van alle eindgerechten (geen bereidingen)."""
+    dishes = Dish.query.filter_by(is_preparation=False).order_by(Dish.name).all()
     return render_template('manage_dishes.html', composed_dishes=dishes)
+
+def process_dish_form(dish):
+    """Hulpfunctie om de formulierdata voor een gerecht te verwerken."""
+    dish.name = request.form.get('dish_name', '').strip()
+    dish.profit_type = request.form['profit_type']
+    dish.profit_value = request.form.get('profit_value', type=float)
+
+    # Verwerk de categorie
+    cat_id = request.form.get('dish_category')
+    cat_name = ''
+    if cat_id == 'new_dish_category':
+        cat_name = request.form.get('new_category_name', '').strip()
+    elif cat_id:
+        category_obj = DishCategory.query.get(cat_id)
+        if category_obj:
+            cat_name = category_obj.name
+    dish.dish_category = get_or_create_dish_category(cat_name)
+
+    # Verwerk de ingrediënten
+    Ingredient.query.filter_by(parent_dish_id=dish.id).delete()
+    ingredient_types = request.form.getlist('ingredient_type[]')
+    ingredient_ids = request.form.getlist('ingredient_id[]')
+    quantities = request.form.getlist('quantity[]')
+
+    for type, id_str, qty_str in zip(ingredient_types, ingredient_ids, quantities):
+        if id_str and qty_str:
+            quantity = float(qty_str.replace(',', '.'))
+            if quantity > 0:
+                ingredient_id = int(id_str)
+                if type == 'product':
+                    dish.ingredients.append(Ingredient(product_id=ingredient_id, quantity=quantity))
+                elif type == 'preparation':
+                    dish.ingredients.append(Ingredient(preparation_id=ingredient_id, quantity=quantity))
 
 @dish_bp.route('/dishes/create', methods=['GET', 'POST'])
 def create_dish():
+    """Pagina voor het aanmaken van een nieuw gerecht."""
     if request.method == 'POST':
-        name = request.form['dish_name'].strip()
+        name = request.form.get('dish_name', '').strip()
         if not name or Dish.query.filter_by(name=name).first():
             flash(f"Gerechtnaam '{name}' is ongeldig of bestaat al.", "danger")
             return redirect(url_for('dishes.create_dish'))
         
-        cat_name = request.form.get('new_dish_category_name', '').strip() if request.form['dish_category'] == 'new_dish_category' else DishCategory.query.get(request.form['dish_category']).name
-        dish_category = get_or_create(DishCategory, cat_name)
-
-        if not dish_category:
-            flash("Gerechtcategorie mag niet leeg zijn.", "danger")
-            return redirect(url_for('dishes.create_dish'))
-
-        new_dish = Dish(
-            name=name,
-            dish_category=dish_category,
-            profit_type=request.form['profit_type'],
-            profit_value=request.form.get('profit_value', type=float)
-        )
+        new_dish = Dish(is_preparation=False)
+        process_dish_form(new_dish)
         
-        product_ids = request.form.getlist('ingredient_product_id[]')
-        quantities = request.form.getlist('quantity[]')
-        for product_id, qty_str in zip(product_ids, quantities):
-            if product_id and qty_str:
-                quantity = float(qty_str.replace(',', '.'))
-                if quantity > 0:
-                    ingredient = Ingredient(product_id=int(product_id), quantity=quantity)
-                    new_dish.ingredients.append(ingredient)
-
         db.session.add(new_dish)
         db.session.commit()
         flash(f"Gerecht '{new_dish.name}' succesvol aangemaakt!", "success")
         return redirect(url_for('dishes.manage_dishes'))
 
+    # Data voorbereiden voor een leeg formulier
     product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
-    dish_categories = DishCategory.query.order_by(DishCategory.name).all()
-    
-    # Converteer de categorieën naar een formaat dat JSON-vriendelijk is
     product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
+    dish_categories = DishCategory.query.order_by(DishCategory.name).all()
+    preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
+    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
 
     return render_template(
-        'create_dish.html',
+        'dish_form.html',
+        form_action=url_for('dishes.create_dish'),
         all_product_categories_json=product_categories_json,
-        all_dish_categories=dish_categories
+        all_dish_categories=dish_categories,
+        all_preparations_json=preparations_json
     )
 
 @dish_bp.route('/dishes/edit/<int:dish_id>', methods=['GET', 'POST'])
 def edit_dish(dish_id):
-    dish = Dish.query.get_or_404(dish_id)
+    """Pagina voor het bewerken van een bestaand gerecht."""
+    dish = Dish.query.filter_by(id=dish_id, is_preparation=False).first_or_404()
     if request.method == 'POST':
-        dish.name = request.form['dish_name'].strip()
-        
-        cat_name = request.form.get('new_dish_category_name', '').strip() if request.form['dish_category'] == 'new_dish_category' else DishCategory.query.get(request.form['dish_category']).name
-        dish.dish_category = get_or_create(DishCategory, cat_name)
-
-        dish.profit_type = request.form['profit_type']
-        dish.profit_value = request.form.get('profit_value', type=float)
-
-        Ingredient.query.filter_by(dish_id=dish.id).delete()
-        
-        product_ids = request.form.getlist('ingredient_product_id[]')
-        quantities = request.form.getlist('quantity[]')
-        for product_id, qty_str in zip(product_ids, quantities):
-             if product_id and qty_str:
-                quantity = float(qty_str.replace(',', '.'))
-                if quantity > 0:
-                    ingredient = Ingredient(dish_id=dish.id, product_id=int(product_id), quantity=quantity)
-                    db.session.add(ingredient)
-        
+        process_dish_form(dish)
         db.session.commit()
-        flash(f"Gerecht '{dish.name}' bijgewerkt.", "success")
+        flash(f"Gerecht '{dish.name}' succesvol bijgewerkt!", "success")
         return redirect(url_for('dishes.manage_dishes'))
 
+    # Data voorbereiden voor een ingevuld formulier
     product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
+    product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
     dish_categories = DishCategory.query.order_by(DishCategory.name).all()
+    preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
+    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
     
-    # Data voorbereiden voor de template
     ingredients_data = []
     for ing in dish.ingredients:
-        ingredients_data.append({
-            'product_id': ing.product_id,
+        item = {
             'quantity': ing.quantity,
-            'category_id': ing.product.category_id
-        })
-    
-    product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
+            'product_id': ing.product_id,
+            'preparation_id': ing.preparation_id,
+        }
+        if ing.product:
+            item['category_id'] = ing.product.category_id
+        ingredients_data.append(item)
 
     return render_template(
         'dish_form.html',
         dish=dish,
         ingredients_data=ingredients_data,
-        form_action=url_for('dishes.edit_dish', dish_id=dish.id),
+        form_action=url_for('dishes.edit_dish', dish_id=dish_id),
         all_product_categories_json=product_categories_json,
-        all_dish_categories=dish_categories
+        all_dish_categories=dish_categories,
+        all_preparations_json=preparations_json
     )
 
 @dish_bp.route('/dishes/delete/<int:dish_id>', methods=['POST'])
 def delete_dish(dish_id):
-    dish = Dish.query.get_or_404(dish_id)
+    """Verwijdert een gerecht."""
+    dish = Dish.query.filter_by(id=dish_id, is_preparation=False).first_or_404()
     db.session.delete(dish)
     db.session.commit()
     flash(f"Gerecht '{dish.name}' succesvol verwijderd.", "success")
     return redirect(url_for('dishes.manage_dishes'))
 
+# De save_order route blijft ongewijzigd
 @dish_bp.route('/save_order', methods=['POST'])
 def save_order():
     data = request.get_json()

@@ -1,88 +1,87 @@
 # db_seeder.py
 import pandas as pd
-import json
 from models import db, Category, Supplier, Product, DishCategory, Dish, Ingredient
-
-def safe_float(value):
-    """Converteert een waarde veilig naar een float, met ondersteuning voor komma's en lege waarden."""
-    s_value = str(value).strip()
-    if not s_value or s_value.lower() == 'nan':
-        return None
-    try:
-        return float(s_value.replace(',', '.'))
-    except (ValueError, TypeError):
-        return None
+import sys
 
 def seed_data():
-    """Vult de database met de initiële data uit de CSV-bestanden."""
-    print("Start seeding database...")
-    
-    # --- Migreer Basisproducten ---
+    """Vult de database met data uit de schone, geëxporteerde CSV-bestanden."""
+    print("Start seeding database from exported CSVs...")
+
     try:
-        products_df = pd.read_csv('geparseerde_basisproducten.csv')
+        # Belangrijk: lees de bestanden in de juiste volgorde om relatieproblemen te voorkomen
         
-        categories = {name: Category(name=name) for name in products_df['category'].dropna().unique()}
-        suppliers = {name: Supplier(name=name) for name in products_df['supplier'].dropna().unique()}
+        # 1. Tabellen zonder afhankelijkheden
+        Category.query.delete()
+        category_df = pd.read_csv('category.csv')
+        for _, row in category_df.iterrows():
+            db.session.add(Category(id=row['id'], name=row['name']))
         
-        db.session.add_all(categories.values())
-        db.session.add_all(suppliers.values())
-        db.session.commit()
-
-        for _, row in products_df.iterrows():
-            product = Product(
-                name=row['name'],
-                category=categories.get(row['category']),
-                package_weight=safe_float(row.get('package_weight')),
-                package_unit=row.get('package_unit', 'Stuks'),
-                package_price=safe_float(row.get('package_price')),
-                supplier=suppliers.get(row['supplier']),
-                article_number=row.get('article_number')
-            )
-            db.session.add(product)
-        db.session.commit()
-        print("✅ Basisproducten succesvol geseed.")
-
-    except FileNotFoundError:
-        print("⚠️ Kon geparseerde_basisproducten.csv niet vinden. Stap overgeslagen.")
-
-    # --- Migreer Samengestelde Gerechten ---
-    try:
-        dishes_df = pd.read_csv('geparseerde_samengestelde_gerechten.csv')
-        
-        dish_categories = {name: DishCategory(name=name) for name in dishes_df['dish_category'].dropna().unique()}
-        db.session.add_all(dish_categories.values())
-        db.session.commit()
-
-        all_products = {p.name: p for p in Product.query.all()}
-
-        for _, row in dishes_df.iterrows():
-            dish = Dish(
-                name=row['dish_name'],
-                dish_category=dish_categories.get(row['dish_category']),
-                profit_type=row.get('profit_type', 'percentage'),
-                profit_value=safe_float(row.get('profit_value', 0))
-            )
-            db.session.add(dish)
+        DishCategory.query.delete()
+        dish_category_df = pd.read_csv('dish_category.csv')
+        for _, row in dish_category_df.iterrows():
+            db.session.add(DishCategory(id=row['id'], name=row['name']))
             
-            try:
-                # Soms is de JSON dubbel-escaped, probeer dit te herstellen
-                ingredients_str = row['ingredients_json'].replace('""', '"')
-                ingredients_data = json.loads(ingredients_str)
-                
-                for ing_data in ingredients_data:
-                    product_obj = all_products.get(ing_data['ingredient_name'])
-                    if product_obj:
-                        ingredient = Ingredient(
-                            quantity=safe_float(ing_data['quantity']),
-                            dish=dish,
-                            product=product_obj
-                        )
-                        db.session.add(ingredient)
-            except (json.JSONDecodeError, TypeError, KeyError) as e:
-                print(f"⚠️ Fout bij parsen van ingrediënten voor '{row['dish_name']}': {e}")
-
+        Supplier.query.delete()
+        supplier_df = pd.read_csv('supplier.csv')
+        for _, row in supplier_df.iterrows():
+            db.session.add(Supplier(id=row['id'], name=row['name']))
+        
         db.session.commit()
-        print("✅ Samengestelde gerechten succesvol geseed.")
+        print("✅ Categorieën en Leveranciers succesvol geseed.")
 
-    except FileNotFoundError:
-        print("⚠️ Kon geparseerde_samengestelde_gerechten.csv niet vinden. Stap overgeslagen.")
+        # 2. Producten (afhankelijk van Category en Supplier)
+        Product.query.delete()
+        product_df = pd.read_csv('product.csv')
+        for _, row in product_df.iterrows():
+            db.session.add(Product(
+                id=row['id'],
+                name=row['name'],
+                category_id=row['category_id'],
+                package_weight=row.get('package_weight'),
+                package_unit=row.get('package_unit'),
+                package_price=row.get('package_price'),
+                supplier_id=row['supplier_id'],
+                article_number=row.get('article_number')
+            ))
+        db.session.commit()
+        print("✅ Producten succesvol geseed.")
+
+        # 3. Gerechten (afhankelijk van DishCategory)
+        Dish.query.delete()
+        dish_df = pd.read_csv('dish.csv')
+        for _, row in dish_df.iterrows():
+            db.session.add(Dish(
+                id=row['id'],
+                name=row['name'],
+                dish_category_id=row['dish_category_id'],
+                profit_type=row['profit_type'],
+                profit_value=row['profit_value'],
+                is_preparation=row.get('is_preparation', False) # Fallback voor oudere exports
+            ))
+        db.session.commit()
+        print("✅ Gerechten succesvol geseed.")
+
+        # 4. Ingrediënten (afhankelijk van Dish en Product)
+        Ingredient.query.delete()
+        ingredient_df = pd.read_csv('ingredient.csv')
+        for _, row in ingredient_df.iterrows():
+            db.session.add(Ingredient(
+                id=row['id'],
+                quantity=row['quantity'],
+                parent_dish_id=row['dish_id'], # Hernoemd in de code, maar dish_id in CSV
+                product_id=row.get('product_id'),
+                preparation_id=row.get('preparation_id')
+            ))
+        db.session.commit()
+        print("✅ Ingrediënten succesvol geseed.")
+        
+        print("\n🎉 Database succesvol gevuld met de nieuwe data!")
+
+    except FileNotFoundError as e:
+        print(f"❌ FOUT: Het bestand '{e.filename}' werd niet gevonden. Zorg ervoor dat alle 6 de CSV-bestanden in de hoofdmap staan.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Een onverwachte fout is opgetreden: {e}")
+        db.session.rollback() # Maak de transactie ongedaan bij een fout
+        sys.exit(1)
+
