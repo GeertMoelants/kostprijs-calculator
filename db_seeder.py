@@ -16,10 +16,16 @@ def seed_data():
         for _, row in category_df.iterrows():
             db.session.add(Category(id=row['id'], name=row['name']))
         
+        db.session.commit()
+        print("✅ category.csv succesvol geseed.")
+        
         DishCategory.query.delete()
         dish_category_df = pd.read_csv('dish_category.csv')
         for _, row in dish_category_df.iterrows():
             db.session.add(DishCategory(id=row['id'], name=row['name']))
+            
+        db.session.commit()
+        print("✅ dish_category.csv succesvol geseed.")    
             
         Supplier.query.delete()
         supplier_df = pd.read_csv('supplier.csv')
@@ -27,7 +33,7 @@ def seed_data():
             db.session.add(Supplier(id=row['id'], name=row['name']))
         
         db.session.commit()
-        print("✅ Categorieën en Leveranciers succesvol geseed.")
+        print("✅ supplier.csv succesvol geseed.")
 
         # 2. Producten (afhankelijk van Category en Supplier)
         Product.query.delete()
