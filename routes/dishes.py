@@ -85,42 +85,65 @@ def create_dish():
         all_preparations_json=preparations_json
     )
 
-@dish_bp.route('/dishes/edit/<int:dish_id>', methods=['GET', 'POST'])
+@dish_bp.route('/edit/<int:dish_id>', methods=['GET', 'POST'])
 def edit_dish(dish_id):
-    """Pagina voor het bewerken van een bestaand gerecht."""
-    dish = Dish.query.filter_by(id=dish_id, is_preparation=False).first_or_404()
-    if request.method == 'POST':
-        process_dish_form(dish)
-        db.session.commit()
-        flash(f"Gerecht '{dish.name}' succesvol bijgewerkt!", "success")
-        return redirect(url_for('dishes.manage_dishes'))
-
-    # Data voorbereiden voor een ingevuld formulier
-    product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
-    product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
-    dish_categories = DishCategory.query.order_by(DishCategory.name).all()
+    dish = Dish.query.get_or_404(dish_id)
+    categories = DishCategory.query.all()
+    product_categories = ProductCategory.query.all()
+    products = Product.query.order_by(Product.name).all()
     preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
-    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
-    
-    ingredients_data = []
-    for ing in dish.ingredients:
-        item = {
-            'quantity': ing.quantity,
-            'product_id': ing.product_id,
-            'preparation_id': ing.preparation_id,
-        }
-        if ing.product:
-            item['category_id'] = ing.product.category_id
-        ingredients_data.append(item)
+
+    if request.method == 'POST':
+        try:
+            # 1. Update de basisgegevens van het gerecht
+            dish.name = request.form['name']
+            dish.dish_category_id = request.form['dish_category_id']
+            dish.profit_type = request.form['profit_type']
+            dish.profit_value = float(request.form['profit_value']) if request.form['profit_value'] else 0.0
+
+            # 2. Verwijder alle oude ingrediënten voor dit gerecht
+            Ingredient.query.filter_by(parent_dish_id=dish_id).delete()
+
+            # 3. Voeg de nieuwe ingrediënten toe (zonder ID)
+            ingredient_types = request.form.getlist('ingredient_type[]')
+            ingredient_ids = request.form.getlist('ingredient_id[]')
+            quantities = request.form.getlist('quantity[]')
+
+            for i in range(len(ingredient_types)):
+                quantity = float(quantities[i].replace(',', '.')) if quantities[i] else 0.0
+                if quantity > 0:
+                    product_id = None
+                    preparation_id = None
+                    
+                    if ingredient_types[i] == 'product':
+                        product_id = int(ingredient_ids[i])
+                    elif ingredient_types[i] == 'preparation':
+                        preparation_id = int(ingredient_ids[i])
+
+                    new_ingredient = Ingredient(
+                        parent_dish_id=dish.id,
+                        product_id=product_id,
+                        preparation_id=preparation_id,
+                        quantity=quantity
+                    )
+                    db.session.add(new_ingredient)
+            
+            # 4. Commit alles in één keer
+            db.session.commit()
+            flash(f"Gerecht '{dish.name}' succesvol bijgewerkt!", 'success')
+            return redirect(url_for('dishes.manage_dishes'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Fout bij het bijwerken van het gerecht: {e}", 'danger')
 
     return render_template(
-        'dish_form.html',
-        dish=dish,
-        ingredients_data=ingredients_data,
-        form_action=url_for('dishes.edit_dish', dish_id=dish_id),
-        all_product_categories_json=product_categories_json,
-        all_dish_categories=dish_categories,
-        all_preparations_json=preparations_json
+        'manage_dishes.html',
+        dish_to_edit=dish, dishes=Dish.query.all(), 
+        categories=categories, 
+        product_categories=product_categories,
+        products=products,
+        preparations=preparations
     )
 
 @dish_bp.route('/dishes/delete/<int:dish_id>', methods=['POST'])
