@@ -9,20 +9,22 @@ import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def seed_data():
-    """Vult de database met data uit de schone, geëxporteerde CSV-bestanden."""
-    print("Start seeding database from exported CSVs...")
+    """
+    Vult de database met initiële data, maar ENKEL als de database leeg is.
+    Dit voorkomt het overschrijven van live data.
+    """
+    
+    # --- DE BELANGRIJKE CONTROLE ---
+    # Controleer of er al data bestaat (bv. in de Category tabel).
+    # Als dat zo is, stop het script onmiddellijk.
+    if Category.query.first():
+        print("✅ Database bevat al data. Seeden wordt overgeslagen.")
+        return
+
+    print("Database is leeg. Start seeding database from exported CSVs...")
 
     try:
-        # Verwijder data in de JUISTE VOLGORDE
-        db.session.query(Ingredient).delete()
-        db.session.query(Dish).delete()
-        db.session.query(Product).delete()
-        db.session.query(Category).delete()
-        db.session.query(DishCategory).delete()
-        db.session.query(Supplier).delete()
-        db.session.commit()
-        
-        # --- Seeding start hier ---
+        # --- Seeding start hier (verwijder-statements zijn niet meer nodig) ---
         
         # 1. Tabellen zonder afhankelijkheden
         category_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'category.csv'))
@@ -64,13 +66,9 @@ def seed_data():
         print("✅ Ingrediënten succesvol geseed.")
         
         db.session.commit()
-        print("\n🎉 Database succesvol gevuld met de nieuwe data!")
+        print("\n🎉 Database succesvol gevuld met de initiële data!")
 
-    except FileNotFoundError as e:
-        print(f"❌ FOUT: Het bestand '{e.filename}' werd niet gevonden. Zorg ervoor dat alle CSV-bestanden in een 'data' map staan.")
-        db.session.rollback()
-        sys.exit(1)
     except Exception as e:
-        print(f"❌ Een onverwachte fout is opgetreden: {e}")
+        print(f"❌ Een onverwachte fout is opgetreden tijdens het seeden: {e}")
         db.session.rollback()
         sys.exit(1)
