@@ -1,6 +1,6 @@
 # routes/dishes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from models import db, Dish, DishCategory, Product, Ingredient, Category as ProductCategory, PreparationCategory
+from models import db, Dish, DishCategory, Product, Ingredient, Category, Category as ProductCategory, PreparationCategory
 from category_order_manager import load_category_order, save_category_order
 
 dish_bp = Blueprint('dishes', __name__, template_folder='../templates')
@@ -105,8 +105,9 @@ def create_dish():
 @dish_bp.route('/edit/<int:dish_id>', methods=['GET', 'POST'])
 def edit_dish(dish_id):
     dish = Dish.query.get_or_404(dish_id)
-    categories = DishCategory.query.all()
-    product_categories = ProductCategory.query.all()
+    # Query de juiste modellen voor het formulier
+    dish_categories = DishCategory.query.order_by(DishCategory.name).all()
+    product_categories = ProductCategory.query.order_by(Category.name).all() # FIX: Was ProductCategory
     products = Product.query.order_by(Product.name).all()
     preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
 
@@ -116,48 +117,52 @@ def edit_dish(dish_id):
             dish.name = request.form['name']
             dish.dish_category_id = request.form['dish_category_id']
             dish.profit_type = request.form['profit_type']
-            dish.profit_value = float(request.form['profit_value']) if request.form['profit_value'] else 0.0
+            dish.profit_value = float(request.form['profit_value'].replace(',', '.')) if request.form['profit_value'] else 0.0
 
-            # 2. Verwijder alle oude ingrediënten voor dit gerecht
-            Ingredient.query.filter_by(parent_dish_id=dish_id).delete()
+            # 2. Verwijder alle oude ingrediënten die bij dit gerecht horen.
+            # De 'synchronize_session=False' is de sleutel tot de oplossing.
+            Ingredient.query.filter_by(parent_dish_id=dish_id).delete(synchronize_session=False)
 
-            # 3. Voeg de nieuwe ingrediënten toe (zonder ID)
+            # 3. Voeg de nieuwe ingrediënten toe als nieuwe objecten (zonder ID)
             ingredient_types = request.form.getlist('ingredient_type[]')
             ingredient_ids = request.form.getlist('ingredient_id[]')
             quantities = request.form.getlist('quantity[]')
 
             for i in range(len(ingredient_types)):
-                quantity = float(quantities[i].replace(',', '.')) if quantities[i] else 0.0
-                if quantity > 0:
-                    product_id = None
-                    preparation_id = None
-                    
-                    if ingredient_types[i] == 'product':
-                        product_id = int(ingredient_ids[i])
-                    elif ingredient_types[i] == 'preparation':
-                        preparation_id = int(ingredient_ids[i])
+                # Zorg ervoor dat de data valide is
+                if quantities[i] and ingredient_ids[i]:
+                    quantity = float(quantities[i].replace(',', '.'))
+                    if quantity > 0:
+                        ingredient_id = int(ingredient_ids[i])
+                        ingredient_type = ingredient_types[i]
 
-                    new_ingredient = Ingredient(
-                        parent_dish_id=dish.id,
-                        product_id=product_id,
-                        preparation_id=preparation_id,
-                        quantity=quantity
-                    )
-                    db.session.add(new_ingredient)
+                        # Maak een volledig nieuw Ingredient-object
+                        new_ingredient = Ingredient(
+                            parent_dish_id=dish.id,
+                            product_id=ingredient_id if ingredient_type == 'product' else None,
+                            preparation_id=ingredient_id if ingredient_type == 'preparation' else None,
+                            quantity=quantity
+                        )
+                        db.session.add(new_ingredient)
             
-            # 4. Commit alles in één keer
+            # 4. Commit alle wijzigingen (deletes en adds) in één keer
             db.session.commit()
+            
             flash(f"Gerecht '{dish.name}' succesvol bijgewerkt!", 'success')
             return redirect(url_for('dishes.manage_dishes'))
 
         except Exception as e:
             db.session.rollback()
             flash(f"Fout bij het bijwerken van het gerecht: {e}", 'danger')
+            # Stuur terug naar de edit-pagina om de fout te tonen
+            return redirect(url_for('dishes.edit_dish', dish_id=dish_id))
 
+    # Voor de GET request, render de template met de juiste data
     return render_template(
         'manage_dishes.html',
-        dish_to_edit=dish, dishes=Dish.query.all(), 
-        categories=categories, 
+        dish_to_edit=dish, 
+        dishes=Dish.query.order_by(Dish.name).all(), 
+        categories=dish_categories, 
         product_categories=product_categories,
         products=products,
         preparations=preparations
