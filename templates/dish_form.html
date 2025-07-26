@@ -6,7 +6,7 @@
     <h2>{{ 'Gerecht Bewerken: ' + dish.name if dish else 'Nieuw Gerecht Samenstellen' }}</h2>
 
     <form action="{{ form_action }}" method="POST">
-        {{ csrf_token() }}
+        {{ csrf_token() | safe }}
         <label for="dish_name">Naam van het gerecht:</label>
         <input type="text" id="dish_name" name="dish_name" value="{{ dish.name if dish else '' }}" required>
         

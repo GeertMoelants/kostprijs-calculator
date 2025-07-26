@@ -10,7 +10,7 @@
     <h2>{{ 'Product Bewerken: ' + product.name if product else 'Nieuw Product Toevoegen' }}</h2>
     
     <form action="{{ form_action }}" method="POST">
-        {{ csrf_token() }}
+        {{ csrf_token() | safe }}
         <label for="name">Productnaam:</label>
         <input type="text" id="name" name="name" value="{{ product.name if product else '' }}" required>
 

@@ -8,7 +8,7 @@
     <a href="{{ url_for('products.add_product') }}" class="button-link success">Nieuw Product Toevoegen</a>
 
     <form method="GET" action="{{ url_for('products.manage_products') }}" class="filter-form">
-        {{ csrf_token() }}
+        {{ csrf_token() | safe }}
         <select name="category" onchange="this.form.submit()">
             <option value="0" {% if not selected_category_id %}selected{% endif %}>Alle Categorieën</option>
             {% for category in all_categories %}
@@ -41,7 +41,7 @@
                 <td>
                     <a href="{{ url_for('products.edit_product', product_id=product.id) }}" class="button-link primary">Bewerken</a>
                     <form action="{{ url_for('products.delete_product', product_id=product.id) }}" method="POST" style="display:inline;">
-                        {{ csrf_token() }} <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ product.name }} wilt verwijderen?');">Verwijderen</button>
+                        {{ csrf_token() | safe }} <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ product.name }} wilt verwijderen?');">Verwijderen</button>
                     </form>
                 </td>
             </tr>
