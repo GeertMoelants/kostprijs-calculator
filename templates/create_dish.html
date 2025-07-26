@@ -4,9 +4,9 @@
 
 {% block content %}
     <h2>Nieuw Gerecht Samenstellen</h2>
-{{ csrf }}
+
     <form action="{{ url_for('dishes.create_dish') }}" method="POST">
-        {{ csrf_token() | safe }}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <label for="dish_name">Naam van het gerecht:</label>
         <input type="text" id="dish_name" name="dish_name" value="{{ dish_name_value if dish_name_value is defined else '' }}" required>
         

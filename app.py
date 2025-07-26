@@ -20,13 +20,15 @@ from routes.preparations import preparation_bp
 # Het is een goede praktijk om ook de hoofdroutes in een blueprint te plaatsen,
 # maar voor nu laten we ze hier voor de eenvoud.
 
+csrf = CSRFProtect()
+
 def create_app():
     """
     Factory-functie om de Flask-applicatie aan te maken.
     Dit is een best practice voor schaalbare en testbare applicaties.
     """
     app = Flask(__name__, instance_relative_config=True)
-    csrf = CSRFProtect(app)
+    csrf.init_app(app)
     # --- Database Configuratie & Geheime Sleutel ---
     # Zorgt ervoor dat de 'instance' map bestaat
     try:

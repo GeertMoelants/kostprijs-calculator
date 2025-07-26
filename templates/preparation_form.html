@@ -6,7 +6,7 @@
     <h2>{{ 'Bereiding Bewerken: ' + preparation.name if preparation else 'Nieuwe Bereiding Maken' }}</h2>
 
     <form action="{{ form_action }}" method="POST">
-        {{ csrf_token() | safe }}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <label for="name">Naam van de bereiding:</label>
         <input type="text" id="name" name="name" value="{{ preparation.name if preparation else '' }}" required>
         
