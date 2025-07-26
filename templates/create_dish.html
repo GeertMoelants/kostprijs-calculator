@@ -6,6 +6,7 @@
     <h2>Nieuw Gerecht Samenstellen</h2>
 
     <form action="{{ url_for('dishes.create_dish') }}" method="POST">
+        {{ csrf_token() }}
         <label for="dish_name">Naam van het gerecht:</label>
         <input type="text" id="dish_name" name="dish_name" value="{{ dish_name_value if dish_name_value is defined else '' }}" required>
         

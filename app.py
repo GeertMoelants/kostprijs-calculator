@@ -2,6 +2,7 @@
 import os
 import click
 from flask import Flask, render_template, jsonify, request
+from flask_wtf.csrf import CSRFProtect
 from flask.cli import with_appcontext
 from collections import OrderedDict
 from sqlalchemy import func
@@ -25,7 +26,7 @@ def create_app():
     Dit is een best practice voor schaalbare en testbare applicaties.
     """
     app = Flask(__name__, instance_relative_config=True)
-
+    csrf = CSRFProtect(app)
     # --- Database Configuratie & Geheime Sleutel ---
     # Zorgt ervoor dat de 'instance' map bestaat
     try:

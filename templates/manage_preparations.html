@@ -21,8 +21,8 @@
                 <td>{{ prep.name }}</td>
                 <td>€ {{ prep.cost_price_calculated | format_currency(2) }} / {{ prep.yield_unit }}</td>
                 <td>
-                    <a href="{{ url_for('preparations.edit_preparation', prep_id=prep.id) }}" class="button-link primary">Bewerken</a>
-                    <form action="{{ url_for('preparations.delete_preparation', prep_id=prep.id) }}" method="POST" style="display:inline;">
+                    <a href="{{ url_for('preparations.edit_preparation', dish_id=prep.id) }}" class="button-link primary">Bewerken</a>
+                    <form action="{{ url_for('preparations.delete_preparation', dish_id=prep.id) }}" method="POST" style="display:inline;">
                         <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ prep.name }} wilt verwijderen?');">Verwijderen</button>
                     </form>
                 </td>

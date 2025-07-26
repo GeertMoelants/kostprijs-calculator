@@ -60,13 +60,14 @@ def create_preparation():
             flash(f"Naam '{name}' is ongeldig of bestaat al.", "danger")
             return redirect(url_for('preparations.create_preparation'))
         
-        # Maak eerst de bereiding aan en commit om een ID te krijgen
+        # Maak een nieuw, leeg bereiding-object aan
         new_preparation = Dish(is_preparation=True)
-        db.session.add(new_preparation)
-        db.session.commit()
         
-        # Vul nu de rest van de data in en verwerk de ingrediënten
+        # Vul de data van het formulier in het object in
         process_preparation_form(new_preparation)
+        
+        # Voeg nu het volledig gevulde object toe aan de sessie en commit
+        db.session.add(new_preparation)
         db.session.commit()
 
         flash(f"Bereiding '{new_preparation.name}' succesvol aangemaakt!", "success")

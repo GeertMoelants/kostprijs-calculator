@@ -68,11 +68,10 @@ def create_dish():
         
         # Maak eerst het gerecht aan en commit om een ID te krijgen
         new_dish = Dish(is_preparation=False)
-        db.session.add(new_dish)
-        db.session.commit()
         
         # Vul nu de rest van de data in en verwerk de ingrediënten
         process_dish_form(new_dish)
+        db.session.add(new_dish)
         db.session.commit()
 
         flash(f"Gerecht '{new_dish.name}' succesvol aangemaakt!", "success")
