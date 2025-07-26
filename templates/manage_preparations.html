@@ -23,7 +23,7 @@
                 <td>
                     <a href="{{ url_for('preparations.edit_preparation', dish_id=prep.id) }}" class="button-link primary">Bewerken</a>
                     <form action="{{ url_for('preparations.delete_preparation', dish_id=prep.id) }}" method="POST" style="display:inline;">
-                        <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ prep.name }} wilt verwijderen?');">Verwijderen</button>
+                        {{ csrf_token() }} <button type="submit" class="button button-danger" onclick="return confirm('Weet je zeker dat je {{ prep.name }} wilt verwijderen?');">Verwijderen</button>
                     </form>
                 </td>
             </tr>
