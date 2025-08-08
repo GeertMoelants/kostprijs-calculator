@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import os
+from sqlalchemy import text
 from models import db, Category, Supplier, Product, DishCategory, Dish, Ingredient
 import sys
 
@@ -14,9 +15,6 @@ def seed_data():
     Dit voorkomt het overschrijven van live data.
     """
     
-    # --- DE BELANGRIJKE CONTROLE ---
-    # Controleer of er al data bestaat (bv. in de Category tabel).
-    # Als dat zo is, stop het script onmiddellijk.
     if Category.query.first():
         print("✅ Database bevat al data. Seeden wordt overgeslagen.")
         return
@@ -24,8 +22,6 @@ def seed_data():
     print("Database is leeg. Start seeding database from exported CSVs...")
 
     try:
-        # --- Seeding start hier (verwijder-statements zijn niet meer nodig) ---
-        
         # 1. Tabellen zonder afhankelijkheden
         category_df = pd.read_csv(os.path.join(BASE_DIR, 'data', 'category.csv'))
         db.session.execute(Category.__table__.insert(), category_df.to_dict(orient='records'))
@@ -64,7 +60,17 @@ def seed_data():
         
         db.session.execute(Ingredient.__table__.insert(), ingredient_df.to_dict(orient='records'))
         print("✅ Ingrediënten succesvol geseed.")
-        
+
+        # --- FIX: Reset the primary key sequences for all tables ---
+        if db.engine.dialect.name == 'postgresql':
+            db.session.execute(text("SELECT setval(pg_get_serial_sequence('category', 'id'), coalesce(max(id), 1)) FROM category;"))
+            db.session.execute(text("SELECT setval(pg_get_serial_sequence('dish_category', 'id'), coalesce(max(id), 1)) FROM dish_category;"))
+            db.session.execute(text("SELECT setval(pg_get_serial_sequence('supplier', 'id'), coalesce(max(id), 1)) FROM supplier;"))
+            db.session.execute(text("SELECT setval(pg_get_serial_sequence('product', 'id'), coalesce(max(id), 1)) FROM product;"))
+            db.session.execute(text("SELECT setval(pg_get_serial_sequence('dish', 'id'), coalesce(max(id), 1)) FROM dish;"))
+            db.session.execute(text("SELECT setval(pg_get_serial_sequence('ingredient', 'id'), coalesce(max(id), 1)) FROM ingredient;"))
+            print("✅ Primary key sequences reset for PostgreSQL.")
+
         db.session.commit()
         print("\n🎉 Database succesvol gevuld met de initiële data!")
 
