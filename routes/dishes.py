@@ -71,13 +71,49 @@ def create_dish():
         if not name or Dish.query.filter_by(name=name).first():
             flash(f"Gerechtnaam '{name}' is ongeldig of bestaat al.", "danger")
             return redirect(url_for('dishes.create_dish'))
+
+        # 1. Create the dish object and set its direct properties
+        new_dish = Dish(
+            name=name,
+            is_preparation=False,
+            profit_type=request.form['profit_type'],
+            profit_value=float(request.form.get('profit_value', '0').replace(',', '.'))
+        )
+
+        # 2. Set the category
+        cat_id = request.form.get('dish_category')
+        cat_name = ''
+        if cat_id == 'new_dish_category':
+            cat_name = request.form.get('new_category_name', '').strip()
+        elif cat_id:
+            category_obj = DishCategory.query.get(cat_id)
+            if category_obj:
+                cat_name = category_obj.name
+        new_dish.dish_category = get_or_create_dish_category(cat_name)
         
-        # Maak eerst het gerecht aan en commit om een ID te krijgen
-        new_dish = Dish(is_preparation=False)
-        
-        # Vul nu de rest van de data in en verwerk de ingrediënten
-        process_dish_form(new_dish)
+        # 3. Add and commit the dish to get an ID
         db.session.add(new_dish)
+        db.session.commit()
+
+        # 4. Now that new_dish.id exists, create the ingredients
+        ingredient_types = request.form.getlist('ingredient_type[]')
+        ingredient_ids = request.form.getlist('ingredient_id[]')
+        quantities = request.form.getlist('quantity[]')
+
+        for type, id_str, qty_str in zip(ingredient_types, ingredient_ids, quantities):
+            if id_str and qty_str:
+                quantity = float(qty_str.replace(',', '.'))
+                if quantity > 0:
+                    ingredient_id = int(id_str)
+                    new_ingredient = Ingredient(
+                        parent_dish_id=new_dish.id, # Use the new ID here
+                        product_id=ingredient_id if type == 'product' else None,
+                        preparation_id=ingredient_id if type == 'preparation' else None,
+                        quantity=quantity
+                    )
+                    db.session.add(new_ingredient)
+        
+        # 5. Commit the new ingredients
         db.session.commit()
 
         flash(f"Gerecht '{new_dish.name}' succesvol aangemaakt!", "success")
@@ -91,7 +127,7 @@ def create_dish():
     preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
 
     return render_template(
-        'dish_form.html', # FIX: Render de juiste template
+        'dish_form.html',
         form_action=url_for('dishes.create_dish'),
         all_product_categories_json=product_categories_json,
         all_dish_categories=dish_categories,
