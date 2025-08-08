@@ -45,6 +45,8 @@ def create_app():
 
     app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or LOCAL_DB_URI
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_POOL_RECYCLE'] = 299
+    app.config['SQLALCHEMY_POOL_PRE_PING'] = True
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'een-sterke-lokale-geheime-sleutel')
 
     # --- DE FIX: Voeg deze twee regels toe voor stabiele databaseverbindingen ---
