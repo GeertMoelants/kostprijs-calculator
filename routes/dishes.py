@@ -63,6 +63,7 @@ def process_dish_form(dish):
                     quantity=quantity
                 )
                 db.session.add(new_ingredient)
+                
 @dish_bp.route('/create', methods=['GET', 'POST'])
 def create_dish():
     """Pagina voor het aanmaken van een nieuw gerecht."""
@@ -119,6 +120,21 @@ def create_dish():
         flash(f"Gerecht '{new_dish.name}' succesvol aangemaakt!", "success")
         return redirect(url_for('dishes.manage_dishes'))
 
+    # Data voorbereiden voor een leeg formulier
+    product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
+    product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
+    dish_categories = DishCategory.query.order_by(DishCategory.name).all()
+    preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
+    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
+
+    return render_template(
+        'dish_form.html',
+        form_action=url_for('dishes.create_dish'),
+        all_product_categories_json=product_categories_json,
+        all_dish_categories=dish_categories,
+        all_preparations_json=preparations_json
+    )
+    
     # Data voorbereiden voor een leeg formulier
     product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
     product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
