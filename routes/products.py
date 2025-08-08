@@ -22,7 +22,7 @@ def get_package_unit_from_form():
         return request.form.get('package_unit_other', 'Stuks').strip() or 'Stuks'
     return unit_selection
 
-@product_bp.route('/manage_products')
+@product_bp.route('/')
 def manage_products():
     query = Product.query
     selected_category_id = request.args.get('category', type=int)
@@ -30,7 +30,7 @@ def manage_products():
 
     if selected_category_id and selected_category_id != 0:
         query = query.filter(Product.category_id == selected_category_id)
-    
+
     if search_query:
         query = query.join(Product.supplier).filter(
             Product.name.ilike(f'%{search_query}%') |
@@ -53,7 +53,7 @@ def get_category_from_form():
     category_id = request.form.get('category')
     if category_id == 'new_category':
         return request.form.get('new_category_name', '').strip()
-    
+
     category_obj = Category.query.get(category_id) if category_id else None
     return category_obj.name if category_obj else None
 
@@ -62,28 +62,28 @@ def get_supplier_from_form():
     supplier_id = request.form.get('supplier')
     if supplier_id == 'new_supplier':
         return request.form.get('new_supplier_name', '').strip()
-        
+
     supplier_obj = Supplier.query.get(supplier_id) if supplier_id else None
     return supplier_obj.name if supplier_obj else None
 
-@product_bp.route('/products/add', methods=['GET', 'POST'])
+@product_bp.route('/add', methods=['GET', 'POST'])
 def add_product():
     if request.method == 'POST':
         name = request.form['name'].strip()
         if not name or Product.query.filter_by(name=name).first():
             flash(f"Productnaam '{name}' is ongeldig of bestaat al.", "danger")
-            return redirect(url_for('products.add_product'))
+            return redirect(url_for('.add_product'))
 
         cat_name = get_category_from_form()
         sup_name = get_supplier_from_form()
-        
+
         category = get_or_create(Category, cat_name)
         supplier = get_or_create(Supplier, sup_name)
         package_unit = get_package_unit_from_form()
 
         if not category or not supplier:
             flash("Categorie en Leverancier mogen niet leeg zijn.", "danger")
-            return redirect(url_for('products.add_product'))
+            return redirect(url_for('.add_product'))
 
         new_product = Product(
             name=name,
@@ -97,22 +97,22 @@ def add_product():
         db.session.add(new_product)
         db.session.commit()
         flash(f"Product '{name}' succesvol toegevoegd!", "success")
-        return redirect(url_for('products.manage_products'))
+        return redirect(url_for('.manage_products'))
 
     all_categories = Category.query.order_by(Category.name).all()
     all_suppliers = Supplier.query.order_by(Supplier.name).all()
-    return render_template('product_form.html', form_action=url_for('products.add_product'), all_categories=all_categories, all_suppliers=all_suppliers)
+    return render_template('product_form.html', form_action=url_for('.add_product'), all_categories=all_categories, all_suppliers=all_suppliers)
 
-@product_bp.route('/products/edit/<int:product_id>', methods=['GET', 'POST'])
+@product_bp.route('/edit/<int:product_id>', methods=['GET', 'POST'])
 def edit_product(product_id):
     product = Product.query.get_or_404(product_id)
 
     if request.method == 'POST':
         product.name = request.form['name'].strip()
-        
+
         cat_name = get_category_from_form()
         sup_name = get_supplier_from_form()
-        
+
         product.category = get_or_create(Category, cat_name)
         product.supplier = get_or_create(Supplier, sup_name)
         product.package_unit = get_package_unit_from_form()
@@ -120,33 +120,33 @@ def edit_product(product_id):
         product.package_weight = request.form.get('package_weight', type=float)
         product.package_price = request.form.get('package_price', type=float)
         product.article_number = request.form.get('article_number')
-        
+
         db.session.commit()
         flash(f"Product '{product.name}' succesvol bijgewerkt!", "success")
-        return redirect(url_for('products.manage_products'))
+        return redirect(url_for('.manage_products'))
 
     all_categories = Category.query.order_by(Category.name).all()
     all_suppliers = Supplier.query.order_by(Supplier.name).all()
     return render_template(
-        'product_form.html', 
+        'product_form.html',
         product=product,
         product_name=product.name,
-        form_action=url_for('products.edit_product', product_id=product.id),
+        form_action=url_for('.edit_product', product_id=product.id),
         all_categories=all_categories,
         all_suppliers=all_suppliers
     )
 
-@product_bp.route('/products/delete/<int:product_id>', methods=['POST'])
+@product_bp.route('/delete/<int:product_id>', methods=['POST'])
 def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
     if product.ingredients:
         flash(f"Kan '{product.name}' niet verwijderen, het is in gebruik in {len(product.ingredients)} gerecht(en).", "danger")
-        return redirect(url_for('products.manage_products'))
-    
+        return redirect(url_for('.manage_products'))
+
     db.session.delete(product)
     db.session.commit()
     flash(f"Product '{product.name}' succesvol verwijderd.", "success")
-    return redirect(url_for('products.manage_products'))
+    return redirect(url_for('.manage_products'))
 
 @product_bp.route('/get_products_by_category_json')
 def get_products_by_category_json():

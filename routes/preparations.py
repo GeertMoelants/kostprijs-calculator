@@ -16,7 +16,10 @@ def get_or_create_prep_category(name):
 def process_preparation_form(dish):
     """Hulpfunctie om de formulierdata voor een bereiding te verwerken."""
     dish.name = request.form.get('preparation_name', '').strip()
-    dish.yield_quantity = float(request.form.get('yield_quantity', '1.0').replace(',', '.'))
+    try:
+        dish.yield_quantity = float(request.form.get('yield_quantity', '1.0').replace(',', '.'))
+    except (ValueError, TypeError):
+        dish.yield_quantity = 1.0
     dish.yield_unit = request.form.get('yield_unit', '').strip()
     
     cat_id = request.form.get('preparation_category')
@@ -32,15 +35,23 @@ def process_preparation_form(dish):
     # Verwijder de oude ingrediënten en voeg de nieuwe toe
     Ingredient.query.filter_by(parent_dish_id=dish.id).delete(synchronize_session=False)
 
-    product_ids = request.form.getlist('product_id[]')
+    ingredient_types = request.form.getlist('ingredient_type[]')
+    ingredient_ids = request.form.getlist('ingredient_id[]')
     quantities = request.form.getlist('quantity[]')
-    for id_str, qty_str in zip(product_ids, quantities):
+
+    for type, id_str, qty_str in zip(ingredient_types, ingredient_ids, quantities):
         if id_str and qty_str:
-            quantity = float(qty_str.replace(',', '.'))
+            try:
+                quantity = float(qty_str.replace(',', '.'))
+            except (ValueError, TypeError):
+                quantity = 0
+
             if quantity > 0:
+                ingredient_id = int(id_str)
                 new_ingredient = Ingredient(
                     parent_dish_id=dish.id,
-                    product_id=int(id_str),
+                    product_id=ingredient_id if type == 'product' else None,
+                    preparation_id=ingredient_id if type == 'preparation' else None,
                     quantity=quantity
                 )
                 db.session.add(new_ingredient)
@@ -77,12 +88,15 @@ def create_preparation():
     product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
     product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
     prep_categories = PreparationCategory.query.order_by(PreparationCategory.name).all()
+    preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
+    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
 
     return render_template(
         'preparation_form.html',
         form_action=url_for('preparations.create_preparation'),
         all_product_categories_json=product_categories_json,
-        all_prep_categories=prep_categories
+        all_prep_categories=prep_categories,
+        all_preparations_json=preparations_json
     )
 
 @preparation_bp.route('/edit/<int:dish_id>', methods=['GET', 'POST'])
@@ -99,10 +113,12 @@ def edit_preparation(dish_id):
     product_categories = ProductCategory.query.order_by(ProductCategory.name).all()
     product_categories_json = [{'id': cat.id, 'name': cat.name} for cat in product_categories]
     prep_categories = PreparationCategory.query.order_by(PreparationCategory.name).all()
+    preparations = Dish.query.filter_by(is_preparation=True).order_by(Dish.name).all()
+    preparations_json = [{'id': p.id, 'name': p.name, 'unit': p.yield_unit, 'unit_price_calculated': p.cost_price_calculated} for p in preparations]
     
     ingredients_data = []
     for ing in preparation.ingredients:
-        item = { 'quantity': ing.quantity, 'product_id': ing.product_id }
+        item = { 'quantity': ing.quantity, 'product_id': ing.product_id, 'preparation_id': ing.preparation_id }
         if ing.product:
             item['category_id'] = ing.product.category_id
         ingredients_data.append(item)
@@ -113,7 +129,8 @@ def edit_preparation(dish_id):
         ingredients_data=ingredients_data,
         form_action=url_for('preparations.edit_preparation', dish_id=dish_id),
         all_product_categories_json=product_categories_json,
-        all_prep_categories=prep_categories
+        all_prep_categories=prep_categories,
+        all_preparations_json=preparations_json
     )
 
 @preparation_bp.route('/delete/<int:dish_id>', methods=['POST'])
