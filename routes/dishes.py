@@ -63,7 +63,6 @@ def process_dish_form(dish):
                     quantity=quantity
                 )
                 db.session.add(new_ingredient)
-
 @dish_bp.route('/create', methods=['GET', 'POST'])
 def create_dish():
     """Pagina voor het aanmaken van een nieuw gerecht."""
