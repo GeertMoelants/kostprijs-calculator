@@ -34,9 +34,9 @@ class Product(db.Model):
 
     @property
     def unit_price_calculated(self):
-        if self.package_price is not None and self.package_weight is not None and self.package_weight != 0:
-            return self.package_price / self.package_weight
-        return 0
+        if self.package_price is None or self.package_weight is None or self.package_weight == 0:
+            return 0
+        return self.package_price / self.package_weight
 
 class DishCategory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
