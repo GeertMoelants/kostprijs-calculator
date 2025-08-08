@@ -24,7 +24,10 @@ def process_dish_form(dish):
     """Hulpfunctie om de formulierdata voor een gerecht te verwerken."""
     dish.name = request.form.get('dish_name', '').strip()
     dish.profit_type = request.form['profit_type']
-    dish.profit_value = float(request.form.get('profit_value', '0').replace(',', '.'))
+    try:
+        dish.profit_value = float(request.form.get('profit_value', '0').replace(',', '.'))
+    except (ValueError, TypeError):
+        dish.profit_value = 0
 
     # Verwerk de categorie
     cat_id = request.form.get('dish_category')
@@ -46,7 +49,11 @@ def process_dish_form(dish):
 
     for type, id_str, qty_str in zip(ingredient_types, ingredient_ids, quantities):
         if id_str and qty_str:
-            quantity = float(qty_str.replace(',', '.'))
+            try:
+                quantity = float(qty_str.replace(',', '.'))
+            except (ValueError, TypeError):
+                quantity = 0
+            
             if quantity > 0:
                 ingredient_id = int(id_str)
                 new_ingredient = Ingredient(
